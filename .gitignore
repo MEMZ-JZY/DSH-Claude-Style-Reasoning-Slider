@@ -16,6 +16,9 @@ yarn.lock
 .DS_Store
 Thumbs.db
 
+# local vision toolkit artifacts
+.dsh-vision-toolkit/
+
 # NOTE: lib/client.js is intentionally NOT ignored. It is a prebuilt
 # ModuleLoader artifact that DSH loads directly when the bundle is installed
 # from git, so it must be committed alongside src/.
