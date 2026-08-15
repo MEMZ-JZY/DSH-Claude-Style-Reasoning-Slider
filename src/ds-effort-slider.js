@@ -7,34 +7,33 @@ const LEVELS = [
   { label: "Max", canonical: "max" },
 ];
 
-// Level identity ramp: non-Max slots are blues that deepen from low to high
-// (deliberately muted — "not too deep", "not too flashy"). Max keeps its own
-// vivid violet identity so the pixel-field moment stays special. SOFT/DEEP are
-// the lighter and darker poles used by fills and shadows. The component
-// interpolates between stops as the thumb travels, so color animates with
-// position, and morphs smoothly when crossing into Max.
+// Level identity: non-Max slots are deliberately monochrome — a very subtle
+// neutral gray that barely deepens with level, so the slider reads clean and
+// the only color moment is Max, which keeps its vivid violet identity (pixel
+// field + flowing gradient label). SOFT/DEEP are the lighter and darker poles
+// used by fills and shadows.
 const LEVEL_COLORS = [
-  [147, 156, 175], // Off — faint slate blue-gray
-  [116, 144, 187], // Low — light blue
-  [94, 127, 197],  // Medium — medium blue
-  [72, 108, 198],  // High — deeper blue
-  [55, 90, 190],   // Extra — deepest blue (still readable, not navy)
+  [158, 158, 158], // Off
+  [151, 151, 151], // Low
+  [144, 144, 144], // Medium
+  [138, 138, 138], // High
+  [131, 131, 131], // Extra
   [145, 85, 214],  // Max — vivid violet
 ];
 const LEVEL_COLORS_SOFT = [
-  [214, 218, 227],
-  [199, 213, 233],
-  [188, 206, 236],
-  [178, 200, 236],
-  [170, 194, 234],
+  [214, 214, 214],
+  [210, 210, 210],
+  [206, 206, 206],
+  [202, 202, 202],
+  [198, 198, 198],
   [186, 153, 230],
 ];
 const LEVEL_COLORS_DEEP = [
-  [114, 122, 137],
-  [90, 114, 156],
-  [70, 98, 168],
-  [56, 82, 166],
-  [44, 70, 160],
+  [120, 120, 120],
+  [114, 114, 114],
+  [108, 108, 108],
+  [102, 102, 102],
+  [96, 96, 96],
   [106, 56, 180],
 ];
 
@@ -112,19 +111,19 @@ class DsEffortSlider extends HTMLElement {
         @property --ds-effort-level-color {
           syntax: "<color>";
           inherits: true;
-          initial-value: #939cab;
+          initial-value: #9e9e9e;
         }
 
         @property --ds-effort-level-soft {
           syntax: "<color>";
           inherits: true;
-          initial-value: #d6dae3;
+          initial-value: #d6d6d6;
         }
 
         @property --ds-effort-level-deep {
           syntax: "<color>";
           inherits: true;
-          initial-value: #727a89;
+          initial-value: #787878;
         }
 
         :host {
@@ -144,9 +143,9 @@ class DsEffortSlider extends HTMLElement {
           --ds-effort-surface: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-1, #ffffff));
           --ds-effort-outline: var(--dsw-alias-border-l1, rgba(76, 70, 65, 0.12));
           --ds-effort-blue: #2788d6;
-          --ds-effort-level-color: #939cab;
-          --ds-effort-level-soft: #d6dae3;
-          --ds-effort-level-deep: #727a89;
+          --ds-effort-level-color: #9e9e9e;
+          --ds-effort-level-soft: #d6d6d6;
+          --ds-effort-level-deep: #787878;
           --ds-effort-width: min(22.5rem, calc(100vw - 2rem));
           --ease-decay: cubic-bezier(0.2, 0, 0, 1);
           transition-property:
@@ -299,6 +298,21 @@ class DsEffortSlider extends HTMLElement {
           color: var(--ds-effort-level-color);
         }
 
+        :host([data-max]) .level-current,
+        :host([data-max]) .trigger-value {
+          background: linear-gradient(90deg, #b39ad6, #e066d9, #8bb0ff, #c898ff, #b39ad6);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: ds-effort-level-flow 3.2s linear infinite;
+          transition-property: opacity, transform, filter;
+        }
+
+        @keyframes ds-effort-level-flow {
+          to { background-position: 200% center; }
+        }
+
         .help-wrap {
           position: relative;
           flex: 0 0 auto;
@@ -414,13 +428,7 @@ class DsEffortSlider extends HTMLElement {
             + (var(--ds-effort-thumb-inset) + var(--ds-effort-thumb-w) * 0.5)
           );
           border-radius: calc(var(--ds-effort-track-radius) - 1px) 0 0 calc(var(--ds-effort-track-radius) - 1px);
-          background: linear-gradient(
-            90deg,
-            var(--ds-effort-track-fill) 0%,
-            var(--ds-effort-track-fill) calc(100% - 2.75rem),
-            var(--ds-effort-level-soft) calc(100% - 2.75rem),
-            var(--ds-effort-level-color) 100%
-          );
+          background: var(--ds-effort-track-fill);
           pointer-events: none;
           transition-property: opacity;
           transition-duration: 200ms;
@@ -866,6 +874,13 @@ class DsEffortSlider extends HTMLElement {
 
           :host([data-max]) .max-fallback {
             opacity: 1;
+          }
+
+          :host([data-max]) .level-current,
+          :host([data-max]) .trigger-value {
+            background: none;
+            color: var(--ds-effort-accent);
+            animation: none;
           }
 
           .pixel-field {
