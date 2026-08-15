@@ -22,6 +22,27 @@ nearest supported level below it, with a toast explaining the change. The
 original purple Ultracode-style pixel field is attached to the model's
 `max`/`ultracode` level.
 
+## Visual design
+
+The slider is a self-contained Web Component (shadow DOM, no framework) with a
+theme-aware look that follows the DeepSeek Harness design tokens:
+
+- **Max moment** — at the `max` level the track turns into an animated purple
+  pixel field (precomputed cells, hand-tuned to stay subtle), and the `Max`
+  label becomes a flowing multi-color gradient text.
+- **Light field** — the track responds to the pointer like a real light source:
+  an interior light pool and a glass-edge highlight on the track outline follow
+  the cursor, brightening as the mouse approaches and fading with distance.
+  `data-max` suppresses the light so the pixel field stays clean.
+- **Level labels** — faint tick labels below the track; the current level is
+  always shown, hovering near a slot highlights it, others stay barely visible.
+- **Glass track** — inner bevel shadows and a fractal-noise layer break up
+  flat-color banding.
+- **Signal bars** — the trigger chip carries six rising signal bars that fill
+  with the current level; the `Max` label flows in the plugin trigger too.
+- **Motion safety** — all effects are CSS transitions/animations or lightweight
+  event handlers (`prefers-reduced-motion` respected, no JS animation loops).
+
 ## Install
 
 ```sh
