@@ -220,6 +220,29 @@ class DsEffortSlider extends HTMLElement {
           }
         }
 
+        .panel::before {
+          content: "";
+          position: absolute;
+          z-index: 0;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          opacity: 0;
+          transition-property: opacity;
+          transition-duration: 300ms;
+          transition-timing-function: ease-in;
+          background:
+            radial-gradient(
+              120% 90% at 85% 0%,
+              color-mix(in srgb, var(--ds-effort-level-color) 12%, transparent) 0%,
+              transparent 60%
+            );
+        }
+
+        :host([data-max]) .panel::before {
+          opacity: 1;
+        }
+
         :host(:not([open]):not([data-closing])) .panel {
           display: none;
         }
@@ -570,6 +593,43 @@ class DsEffortSlider extends HTMLElement {
           opacity: 0;
         }
 
+        .level-labels {
+          position: relative;
+          height: 0.875rem;
+          margin-top: 0.375rem;
+        }
+
+        .level-label {
+          position: absolute;
+          top: 0;
+          left: calc(
+            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
+              * var(--tick-frac, 0)
+            + (var(--ds-effort-thumb-inset) + var(--ds-effort-thumb-w) * 0.5)
+          );
+          transform: translateX(-50%);
+          font-size: 0.625rem;
+          font-weight: 500;
+          line-height: 1;
+          color: var(--ds-effort-muted);
+          opacity: 0.85;
+          white-space: nowrap;
+          transition-property: color, font-weight, opacity;
+          transition-duration: 180ms;
+          transition-timing-function: var(--ease-decay);
+        }
+
+        .level-label[data-disabled] {
+          color: var(--ds-effort-muted);
+          opacity: 0.35;
+        }
+
+        .level-label.is-active {
+          color: var(--ds-effort-level-color);
+          font-weight: 700;
+          opacity: 1;
+        }
+
         .range {
           position: absolute;
           z-index: 3;
@@ -623,6 +683,43 @@ class DsEffortSlider extends HTMLElement {
           background: transparent;
           opacity: 0;
           pointer-events: none;
+        }
+
+        .thumb-glow {
+          position: absolute;
+          z-index: 1;
+          top: 50%;
+          left: calc(
+            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
+              * var(--ds-effort-progress, 0)
+            + var(--ds-effort-thumb-inset)
+          );
+          width: calc(var(--ds-effort-thumb-w) + 0.875rem);
+          height: calc(var(--ds-effort-thumb-h) + 0.875rem);
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          background: radial-gradient(
+            circle,
+            color-mix(in srgb, var(--ds-effort-level-color) 50%, transparent) 0%,
+            transparent 70%
+          );
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        :host([data-glow]) .thumb-glow {
+          animation: ds-effort-thumb-breathe 2.6s ease-in-out infinite;
+        }
+
+        @keyframes ds-effort-thumb-breathe {
+          0%, 100% {
+            opacity: 0.28;
+            transform: translate(-50%, -50%) scale(0.92);
+          }
+          50% {
+            opacity: 0.5;
+            transform: translate(-50%, -50%) scale(1.05);
+          }
         }
 
         .thumb {
@@ -892,6 +989,9 @@ class DsEffortSlider extends HTMLElement {
           .level-current,
           .level-outgoing,
           .panel,
+          .panel::before,
+          .level-label,
+          .thumb-glow,
           .track::before,
           .track-fill,
           .range::-webkit-slider-thumb,
@@ -902,6 +1002,11 @@ class DsEffortSlider extends HTMLElement {
           .help-button,
           .tooltip {
             transition-duration: 0.001ms;
+          }
+
+          .thumb-glow {
+            animation: none;
+            opacity: 0.35;
           }
 
           :host([data-max]) .max-fallback {
@@ -975,6 +1080,7 @@ class DsEffortSlider extends HTMLElement {
               <div class="max-fallback"></div>
               <canvas class="pixel-field"></canvas>
               <div class="ticks"></div>
+              <div class="thumb-glow"></div>
               <div class="thumb"></div>
             </div>
             <input
@@ -990,6 +1096,8 @@ class DsEffortSlider extends HTMLElement {
               aria-valuetext="Default"
             />
           </div>
+
+          <div class="level-labels" aria-hidden="true"></div>
         </section>
       </div>
     `;
@@ -999,6 +1107,7 @@ class DsEffortSlider extends HTMLElement {
     this._track = this.shadowRoot.querySelector(".track");
     this._canvas = this.shadowRoot.querySelector(".pixel-field");
     this._ticksEl = this.shadowRoot.querySelector(".ticks");
+    this._labelsEl = this.shadowRoot.querySelector(".level-labels");
     this._thumb = this.shadowRoot.querySelector(".thumb");
     this._currentLabel = this.shadowRoot.querySelector(".level-current");
     this._outgoingLabel = this.shadowRoot.querySelector(".level-outgoing");
@@ -1162,11 +1271,18 @@ class DsEffortSlider extends HTMLElement {
     if (!this._ticksEl) return;
     this._ticksEl.textContent = "";
     this._ticks = [];
+    this._labels = [];
+    if (this._labelsEl) this._labelsEl.textContent = "";
     for (let i = 0; i < this._levels.length; i += 1) {
       const tick = document.createElement("span");
       tick.className = "tick";
       this._ticksEl.appendChild(tick);
       this._ticks.push(tick);
+      const label = document.createElement("span");
+      label.className = "level-label";
+      label.textContent = this._levels[i].label;
+      if (this._labelsEl) this._labelsEl.appendChild(label);
+      this._labels.push(label);
     }
     this._input.max = String(this._levels.length - 1);
     this._supportedSet = new Set(this._levels.map((_, i) => i));
@@ -1183,6 +1299,10 @@ class DsEffortSlider extends HTMLElement {
       const tick = this._ticks[i];
       tick.style.setProperty("--tick-frac", String(this._valueToDisplay(i)));
       tick.toggleAttribute("data-disabled", !this._isSupported(i));
+    }
+    for (let i = 0; i < this._labels.length; i += 1) {
+      const label = this._labels[i];
+      label.style.setProperty("--tick-frac", String(this._valueToDisplay(i)));
     }
   }
 
@@ -1463,6 +1583,13 @@ class DsEffortSlider extends HTMLElement {
     this._ticks.forEach((tick, i) => {
       tick.classList.toggle("on", i <= activeIndex && this._isSupported(i));
     });
+    if (this._labels) {
+      this._labels.forEach((label, i) => {
+        const supported = this._isSupported(i);
+        label.classList.toggle("is-active", i === activeIndex && supported);
+        label.toggleAttribute("data-disabled", !supported);
+      });
+    }
   }
 
   _updateTriggerBars(activeIndex) {
