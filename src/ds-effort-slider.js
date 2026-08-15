@@ -150,7 +150,7 @@ class DsEffortSlider extends HTMLElement {
           --light-x: 50%;
           --light-y: 50%;
           --light-strength: 0;
-          --ds-effort-width: min(20rem, calc(100vw - 2rem));
+          --ds-effort-width: min(21rem, calc(100vw - 2rem));
           --ease-decay: cubic-bezier(0.2, 0, 0, 1);
           transition-property:
             --ds-effort-progress,
