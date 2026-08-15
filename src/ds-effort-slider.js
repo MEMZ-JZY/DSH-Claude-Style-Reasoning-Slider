@@ -662,43 +662,6 @@ class DsEffortSlider extends HTMLElement {
           pointer-events: none;
         }
 
-        .thumb-glow {
-          position: absolute;
-          z-index: 1;
-          top: 50%;
-          left: calc(
-            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
-              * var(--ds-effort-progress, 0)
-            + var(--ds-effort-thumb-inset)
-          );
-          width: calc(var(--ds-effort-thumb-w) + 0.875rem);
-          height: calc(var(--ds-effort-thumb-h) + 0.875rem);
-          border-radius: 50%;
-          transform: translate(-50%, -50%);
-          background: radial-gradient(
-            circle,
-            color-mix(in srgb, var(--ds-effort-level-color) 58%, transparent) 0%,
-            transparent 70%
-          );
-          opacity: 0;
-          pointer-events: none;
-        }
-
-        :host([data-glow]) .thumb-glow {
-          animation: ds-effort-thumb-breathe 2.6s ease-in-out infinite;
-        }
-
-        @keyframes ds-effort-thumb-breathe {
-          0%, 100% {
-            opacity: 0.36;
-            transform: translate(-50%, -50%) scale(0.92);
-          }
-          50% {
-            opacity: 0.58;
-            transform: translate(-50%, -50%) scale(1.05);
-          }
-        }
-
         .thumb {
           position: absolute;
           z-index: 2;
@@ -783,7 +746,6 @@ class DsEffortSlider extends HTMLElement {
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.95),
             inset 0 -1px 1px color-mix(in srgb, var(--ds-effort-level-deep) 10%, transparent),
-            0 0 0 3px color-mix(in srgb, var(--ds-effort-level-color) 24%, transparent),
             0 1px 2px rgba(62, 56, 50, 0.1),
             0 4px 10px rgba(62, 56, 50, 0.06);
         }
@@ -967,7 +929,6 @@ class DsEffortSlider extends HTMLElement {
           .level-outgoing,
           .panel,
           .level-label,
-          .thumb-glow,
           .track::before,
           .track-fill,
           .range::-webkit-slider-thumb,
@@ -978,11 +939,6 @@ class DsEffortSlider extends HTMLElement {
           .help-button,
           .tooltip {
             transition-duration: 0.001ms;
-          }
-
-          .thumb-glow {
-            animation: none;
-            opacity: 0.35;
           }
 
           :host([data-max]) .max-fallback {
@@ -1056,7 +1012,6 @@ class DsEffortSlider extends HTMLElement {
               <div class="max-fallback"></div>
               <canvas class="pixel-field"></canvas>
               <div class="ticks"></div>
-              <div class="thumb-glow"></div>
               <div class="thumb"></div>
             </div>
             <input
