@@ -16,25 +16,25 @@ const LEVEL_COLORS = [
   [158, 158, 158], // Off
   [151, 151, 151], // Low
   [144, 144, 144], // Medium
-  [138, 138, 138], // High
-  [131, 131, 131], // Extra
-  [145, 85, 214],  // Max — vivid violet
+  [152, 142, 208], // High — light periwinkle
+  [146, 128, 202], // Extra — periwinkle
+  [142, 104, 216], // Max — light blue-purple
 ];
 const LEVEL_COLORS_SOFT = [
   [214, 214, 214],
   [210, 210, 210],
   [206, 206, 206],
-  [202, 202, 202],
-  [198, 198, 198],
-  [186, 153, 230],
+  [198, 192, 228],
+  [194, 184, 226],
+  [188, 162, 232],
 ];
 const LEVEL_COLORS_DEEP = [
   [120, 120, 120],
   [114, 114, 114],
   [108, 108, 108],
-  [102, 102, 102],
-  [96, 96, 96],
-  [106, 56, 180],
+  [114, 102, 174],
+  [110, 94, 170],
+  [102, 64, 182],
 ];
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -150,7 +150,7 @@ class DsEffortSlider extends HTMLElement {
           --light-x: 50%;
           --light-y: 50%;
           --light-strength: 0;
-          --ds-effort-width: min(18.5rem, calc(100vw - 2rem));
+          --ds-effort-width: min(20rem, calc(100vw - 2rem));
           --ease-decay: cubic-bezier(0.2, 0, 0, 1);
           transition-property:
             --ds-effort-progress,
@@ -195,7 +195,7 @@ class DsEffortSlider extends HTMLElement {
           right: 0;
           bottom: 3.25rem;
           width: 100%;
-          padding: 1rem 1.125rem;
+          padding: 0.75rem 1rem;
           border: 1px solid var(--ds-effort-outline);
           border-radius: 1rem;
           background: color-mix(in srgb, var(--ds-effort-surface) 88%, transparent);
@@ -238,7 +238,7 @@ class DsEffortSlider extends HTMLElement {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          min-height: 2rem;
+          min-height: 1.75rem;
           gap: 0.75rem;
         }
 
@@ -318,7 +318,7 @@ class DsEffortSlider extends HTMLElement {
 
         :host([data-max]) .level-current,
         :host([data-max]) .trigger-value {
-          background: linear-gradient(90deg, #b39ad6, #e066d9, #8bb0ff, #c898ff, #b39ad6);
+          background: linear-gradient(90deg, #b39ad6, #9d86e0, #8bb0ff, #a88fe8, #b39ad6);
           background-size: 200% auto;
           -webkit-background-clip: text;
           background-clip: text;
@@ -411,7 +411,7 @@ class DsEffortSlider extends HTMLElement {
         .axis {
           display: flex;
           justify-content: space-between;
-          margin-top: 1.25rem;
+          margin-top: 0.75rem;
           color: var(--ds-effort-muted);
           font-size: 0.875rem;
           font-weight: 450;
@@ -422,7 +422,7 @@ class DsEffortSlider extends HTMLElement {
         .track-shell {
           position: relative;
           height: 2.75rem;
-          margin-top: 0.75rem;
+          margin-top: 0.5rem;
         }
 
         .track {
@@ -917,15 +917,15 @@ class DsEffortSlider extends HTMLElement {
         }
 
         :host([inline]) .axis {
-          margin-top: 0.5rem;
+          margin-top: 0.375rem;
         }
 
         :host([inline]) .track-shell {
-          margin-top: 0.5rem;
+          margin-top: 0.375rem;
         }
 
         :host([inline]) .track-shell {
-          margin-top: 0.5rem;
+          margin-top: 0.375rem;
         }
 
         :host([inline]) .track {

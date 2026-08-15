@@ -662,11 +662,11 @@ const CSS = `
 .ds-effort-trigger:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}
 .ds-effort-triggerLabel{text-overflow:ellipsis;white-space:nowrap;min-width:0;overflow:hidden}
 .ds-effort-triggerEffort{color:var(--dsw-alias-label-tertiary);flex:none}
-.ds-effort-triggerMax .ds-effort-triggerEffort{background:linear-gradient(90deg,#b39ad6,#e066d9,#8bb0ff,#c898ff,#b39ad6);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ds-effort-trigger-flow 3.2s linear infinite}
+.ds-effort-triggerMax .ds-effort-triggerEffort{background:linear-gradient(90deg,#b39ad6,#9d86e0,#8bb0ff,#a88fe8,#b39ad6);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ds-effort-trigger-flow 3.2s linear infinite}
 @keyframes ds-effort-trigger-flow{to{background-position:200% center}}
 .ds-effort-chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s}
 .ds-effort-chevronOpen{transform:rotate(180deg)}
-.ds-effort-menu{z-index:20;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1));width:min(236px,100vw - 32px);max-height:min(400px,100vh - 96px);box-shadow:var(--dsw-shadow-lv3,0 12px 28px rgba(0,0,0,.12));color:var(--dsw-alias-label-primary);border-radius:12px;flex-direction:column;padding:4px;display:flex;position:absolute;bottom:calc(100% + 8px);right:0;overflow-y:auto;overflow-x:hidden;transform-origin:bottom right;animation:ds-effort-menu-in 160ms cubic-bezier(.22,.61,.36,1)}
+.ds-effort-menu{z-index:20;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1));width:min(244px,100vw - 32px);max-height:min(400px,100vh - 96px);box-shadow:var(--dsw-shadow-lv3,0 12px 28px rgba(0,0,0,.12));color:var(--dsw-alias-label-primary);border-radius:12px;flex-direction:column;padding:4px;display:flex;position:absolute;bottom:calc(100% + 8px);right:0;overflow-y:auto;overflow-x:hidden;transform-origin:bottom right;animation:ds-effort-menu-in 160ms cubic-bezier(.22,.61,.36,1)}
 @keyframes ds-effort-menu-in{from{opacity:0;transform:scale(.97) translateY(4px)}}
 .ds-effort-status,.ds-effort-empty{color:var(--dsw-alias-label-tertiary);padding:10px;font-size:13px;line-height:20px}
 .ds-effort-error,.ds-effort-warning{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-state-error-primary);border-radius:8px;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px;padding:7px 8px;font-size:12px;line-height:18px;display:flex}
