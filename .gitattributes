@@ -1,0 +1,3 @@
+# Normalize to LF in the repository so diffs stay clean across platforms.
+# This bundle is installed from git and loaded by DSH on Linux/macOS/Windows.
+* text=auto eol=lf

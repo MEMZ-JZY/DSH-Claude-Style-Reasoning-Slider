@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# lockfiles are not committed: this bundle has no runtime dependencies
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# npm pack output
+*.tgz
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# NOTE: lib/client.js is intentionally NOT ignored. It is a prebuilt
+# ModuleLoader artifact that DSH loads directly when the bundle is installed
+# from git, so it must be committed alongside src/.
