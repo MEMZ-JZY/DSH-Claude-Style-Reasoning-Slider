@@ -89,7 +89,6 @@ class DsEffortSlider extends HTMLElement {
     this._levels = LEVELS;
     this._ticks = [];
     this._dragging = false;
-    this._hoverIndex = null;
     this._canvasFrame = 0;
     this._labelFrame = 0;
     this._labelTimer = 0;
@@ -473,9 +472,9 @@ class DsEffortSlider extends HTMLElement {
           z-index: 1;
           top: 0.5rem;
           bottom: 0.5rem;
-          left: -1px;
-          right: -1px;
-          border-radius: calc(var(--ds-effort-track-radius) + 1px);
+          left: 0;
+          right: 0;
+          border-radius: var(--ds-effort-track-radius);
           background: radial-gradient(
             circle at var(--light-x, 50%) var(--light-y, 50%),
             #ffffff 0%,
@@ -636,49 +635,6 @@ class DsEffortSlider extends HTMLElement {
 
         :host([data-max]) .tick {
           opacity: 0;
-        }
-
-        .level-labels {
-          position: relative;
-          height: 0.875rem;
-          margin-top: 0.375rem;
-        }
-
-        .level-label {
-          position: absolute;
-          top: 0;
-          left: calc(
-            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
-              * var(--tick-frac, 0)
-            + (var(--ds-effort-thumb-inset) + var(--ds-effort-thumb-w) * 0.5)
-          );
-          transform: translateX(-50%);
-          font-size: 0.625rem;
-          font-weight: 500;
-          line-height: 1;
-          color: var(--ds-effort-muted);
-          opacity: 0.15;
-          white-space: nowrap;
-          transition-property: color, font-weight, opacity, transform;
-          transition-duration: 180ms;
-          transition-timing-function: var(--ease-decay);
-        }
-
-        .level-label[data-disabled] {
-          color: var(--ds-effort-muted);
-          opacity: 0.12;
-        }
-
-        .level-label.is-active {
-          color: var(--ds-effort-level-color);
-          font-weight: 700;
-          opacity: 1;
-        }
-
-        .level-label.is-hover {
-          color: var(--ds-effort-level-color);
-          opacity: 0.9;
-          transform: translateX(-50%) translateY(-2px);
         }
 
         .range {
@@ -1002,7 +958,6 @@ class DsEffortSlider extends HTMLElement {
           .level-current,
           .level-outgoing,
           .panel,
-          .level-label,
           .track::before,
           .track-fill,
           .track-light,
@@ -1107,8 +1062,6 @@ class DsEffortSlider extends HTMLElement {
               aria-valuetext="Default"
             />
           </div>
-
-          <div class="level-labels" aria-hidden="true"></div>
         </section>
       </div>
     `;
@@ -1118,7 +1071,6 @@ class DsEffortSlider extends HTMLElement {
     this._track = this.shadowRoot.querySelector(".track");
     this._canvas = this.shadowRoot.querySelector(".pixel-field");
     this._ticksEl = this.shadowRoot.querySelector(".ticks");
-    this._labelsEl = this.shadowRoot.querySelector(".level-labels");
     this._thumb = this.shadowRoot.querySelector(".thumb");
     this._currentLabel = this.shadowRoot.querySelector(".level-current");
     this._outgoingLabel = this.shadowRoot.querySelector(".level-outgoing");
@@ -1169,7 +1121,7 @@ class DsEffortSlider extends HTMLElement {
         this._trigger.focus();
       }
     }, { signal });
-    // 鼠标靠近轨道时，高亮最近刻度的标签并移动光场；离开后恢复
+    // 鼠标靠近轨道时移动光场；离开后恢复
     this._panel.addEventListener("pointermove", (event) => {
       const rect = this._track.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
@@ -1183,13 +1135,9 @@ class DsEffortSlider extends HTMLElement {
       this.style.setProperty("--light-x", `${(lx * 100).toFixed(1)}%`);
       this.style.setProperty("--light-y", `${(ly * 100).toFixed(1)}%`);
       this.style.setProperty("--light-strength", strength.toFixed(3));
-      this._hoverIndex = Math.round(lx * (this._levels.length - 1));
-      this._updateLabelHover();
     }, { signal });
     this._panel.addEventListener("pointerleave", () => {
       this.style.setProperty("--light-strength", "0");
-      this._hoverIndex = null;
-      this._updateLabelHover();
     }, { signal });
 
     document.addEventListener("pointerdown", this._onDocumentPointerDown, true);
@@ -1304,18 +1252,11 @@ class DsEffortSlider extends HTMLElement {
     if (!this._ticksEl) return;
     this._ticksEl.textContent = "";
     this._ticks = [];
-    this._labels = [];
-    if (this._labelsEl) this._labelsEl.textContent = "";
     for (let i = 0; i < this._levels.length; i += 1) {
       const tick = document.createElement("span");
       tick.className = "tick";
       this._ticksEl.appendChild(tick);
       this._ticks.push(tick);
-      const label = document.createElement("span");
-      label.className = "level-label";
-      label.textContent = this._levels[i].label;
-      if (this._labelsEl) this._labelsEl.appendChild(label);
-      this._labels.push(label);
     }
     this._input.max = String(this._levels.length - 1);
     this._supportedSet = new Set(this._levels.map((_, i) => i));
@@ -1332,10 +1273,6 @@ class DsEffortSlider extends HTMLElement {
       const tick = this._ticks[i];
       tick.style.setProperty("--tick-frac", String(this._valueToDisplay(i)));
       tick.toggleAttribute("data-disabled", !this._isSupported(i));
-    }
-    for (let i = 0; i < this._labels.length; i += 1) {
-      const label = this._labels[i];
-      label.style.setProperty("--tick-frac", String(this._valueToDisplay(i)));
     }
   }
 
@@ -1615,24 +1552,6 @@ class DsEffortSlider extends HTMLElement {
     if (!this._ticks) return;
     this._ticks.forEach((tick, i) => {
       tick.classList.toggle("on", i <= activeIndex && this._isSupported(i));
-    });
-    if (this._labels) {
-      this._labels.forEach((label, i) => {
-        const supported = this._isSupported(i);
-        label.classList.toggle("is-active", i === activeIndex && supported);
-        label.toggleAttribute("data-disabled", !supported);
-      });
-    }
-    this._updateLabelHover();
-  }
-
-  _updateLabelHover() {
-    if (!this._labels) return;
-    this._labels.forEach((label, i) => {
-      label.classList.toggle(
-        "is-hover",
-        i === this._hoverIndex && i !== this._levelIndex && this._isSupported(i),
-      );
     });
   }
 
