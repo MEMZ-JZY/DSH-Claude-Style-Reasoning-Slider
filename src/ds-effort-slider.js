@@ -153,8 +153,8 @@ class DsEffortSlider extends HTMLElement {
             --ds-effort-level-color,
             --ds-effort-level-soft,
             --ds-effort-level-deep;
-          transition-duration: 220ms;
-          transition-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+          transition-duration: 360ms;
+          transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
           display: block;
           width: var(--ds-effort-width);
           max-width: 100%;
@@ -281,7 +281,7 @@ class DsEffortSlider extends HTMLElement {
           transform: translateY(0);
           filter: blur(0);
           transition-property: opacity, transform, filter, color;
-          transition-duration: 180ms;
+          transition-duration: 260ms;
           transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
         }
 
@@ -1544,7 +1544,7 @@ class DsEffortSlider extends HTMLElement {
     this._labelTimer = effortTiming.timeout(() => {
       this._outgoingLabel.textContent = "";
       this._outgoingLabel.classList.remove("is-exiting");
-    }, 200);
+    }, 320);
   }
 
   _setMax(isMax) {
