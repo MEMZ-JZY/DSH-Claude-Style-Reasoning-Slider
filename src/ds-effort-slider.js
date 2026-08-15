@@ -314,6 +314,7 @@ class DsEffortSlider extends HTMLElement {
 
         :host([data-glow]) .level-current {
           color: var(--ds-effort-level-color);
+          text-shadow: 0 0 8px color-mix(in srgb, var(--ds-effort-level-color) 55%, transparent);
         }
 
         :host([data-max]) .level-current,
