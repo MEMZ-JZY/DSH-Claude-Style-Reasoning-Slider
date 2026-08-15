@@ -1,4 +1,11 @@
-const LEVELS = ["Default", "Low", "Medium", "High", "Extra", "Max"];
+const LEVELS = [
+  { label: "Off", canonical: "off" },
+  { label: "Low", canonical: "low" },
+  { label: "Medium", canonical: "medium" },
+  { label: "High", canonical: "high" },
+  { label: "Extra", canonical: "extra" },
+  { label: "Max", canonical: "max" },
+];
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const smoothstep = (edge0, edge1, value) => {
@@ -27,7 +34,11 @@ let effortTiming = {
 
 class DsEffortSlider extends HTMLElement {
   static get observedAttributes() {
-    return ["value", "open", "disabled", "supported"];
+    return [
+      "value", "open", "disabled", "supported", "inline",
+      "label", "axis-low", "axis-high", "tooltip",
+      "input-aria-label", "help-aria-label",
+    ];
   }
 
   constructor() {
@@ -36,6 +47,8 @@ class DsEffortSlider extends HTMLElement {
     this._uid = `ds-effort-${++instanceCount}`;
     this._value = 0;
     this._levelIndex = 0;
+    this._levels = LEVELS;
+    this._ticks = [];
     this._dragging = false;
     this._pointerSamples = [];
     this._springFrame = 0;
@@ -63,6 +76,7 @@ class DsEffortSlider extends HTMLElement {
           --ds-effort-progress: 0;
           --ds-effort-thumb-w: 1.5rem;
           --ds-effort-thumb-h: 1.625rem;
+          --ds-effort-thumb-inset: 2px;
           --ds-effort-track-pad: 1px;
           --ds-effort-track-radius: 0.625rem;
           --ds-effort-surface: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-1, #ffffff));
@@ -158,7 +172,7 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .level-stage::after {
-          content: "Max";
+          content: "Default";
           visibility: hidden;
           white-space: nowrap;
         }
@@ -319,9 +333,9 @@ class DsEffortSlider extends HTMLElement {
           bottom: 0;
           left: var(--ds-effort-track-pad);
           width: calc(
-            (100% - (var(--ds-effort-track-pad) * 2) - var(--ds-effort-thumb-w))
+            (100% - (var(--ds-effort-track-pad) * 2) - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
               * var(--ds-effort-progress, 0)
-            + (var(--ds-effort-thumb-w) * 0.5)
+            + (var(--ds-effort-thumb-inset) + var(--ds-effort-thumb-w) * 0.5)
           );
           border-radius: calc(var(--ds-effort-track-radius) - 1px) 0 0 calc(var(--ds-effort-track-radius) - 1px);
           background: var(--ds-effort-track-fill);
@@ -394,25 +408,35 @@ class DsEffortSlider extends HTMLElement {
         .ticks {
           position: absolute;
           z-index: 1;
-          inset: 0 calc(var(--ds-effort-track-pad) + var(--ds-effort-thumb-w) * 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
+          inset: 0;
           pointer-events: none;
         }
 
         .tick {
+          position: absolute;
+          top: 50%;
+          left: calc(
+            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
+              * var(--tick-frac, 0)
+            + (var(--ds-effort-thumb-inset) + var(--ds-effort-thumb-w) * 0.5)
+          );
           width: 0.25rem;
           height: 0.25rem;
           border-radius: 999px;
           background: #b6b2af;
           opacity: 0.82;
+          transform: translate(-50%, -50%);
           transition-property: opacity;
           transition-duration: 180ms;
           transition-timing-function: var(--ease-decay);
         }
 
-        .tick:last-child {
+        .tick[data-disabled] {
+          background: rgba(128, 128, 128, 0.22);
+          opacity: 0.45;
+        }
+
+        :host([data-max-supported]) .tick:last-child {
           background: var(--ds-effort-accent);
           opacity: 1;
         }
@@ -444,21 +468,16 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .range::-webkit-slider-thumb {
-          width: var(--ds-effort-thumb-w);
-          height: var(--ds-effort-thumb-h);
+          width: 1px;
+          height: 1px;
           margin-top: 0;
           appearance: none;
           -webkit-appearance: none;
-          border: 1px solid rgba(76, 70, 65, 0.13);
-          border-radius: 0.5rem;
-          background: #fff;
-          box-shadow:
-            0 1px 2px rgba(62, 56, 50, 0.08),
-            0 4px 10px rgba(62, 56, 50, 0.055);
-          cursor: ew-resize;
-          transition-property: transform;
-          transition-duration: 150ms;
-          transition-timing-function: ease-out;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          opacity: 0;
+          pointer-events: none;
         }
 
         .range::-moz-range-track {
@@ -472,6 +491,24 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .range::-moz-range-thumb {
+          width: 1px;
+          height: 1px;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .thumb {
+          position: absolute;
+          z-index: 2;
+          top: 50%;
+          left: calc(
+            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
+              * var(--ds-effort-progress, 0)
+            + var(--ds-effort-thumb-inset)
+          );
           width: var(--ds-effort-thumb-w);
           height: var(--ds-effort-thumb-h);
           border: 1px solid rgba(76, 70, 65, 0.13);
@@ -480,28 +517,18 @@ class DsEffortSlider extends HTMLElement {
           box-shadow:
             0 1px 2px rgba(62, 56, 50, 0.08),
             0 4px 10px rgba(62, 56, 50, 0.055);
-          cursor: ew-resize;
+          pointer-events: none;
+          transform: translateY(-50%);
           transition-property: transform;
           transition-duration: 150ms;
           transition-timing-function: ease-out;
         }
 
-        .range:active::-webkit-slider-thumb {
-          transform: scale(0.96);
+        :host([data-dragging]) .thumb {
+          transform: translateY(-50%) scale(0.96);
         }
 
-        .range:active::-moz-range-thumb {
-          transform: scale(0.96);
-        }
-
-        .range:focus-visible::-webkit-slider-thumb {
-          box-shadow:
-            0 0 0 3px color-mix(in srgb, var(--ds-effort-accent) 30%, transparent),
-            0 1px 2px rgba(62, 56, 50, 0.08),
-            0 4px 10px rgba(62, 56, 50, 0.055);
-        }
-
-        .range:focus-visible::-moz-range-thumb {
+        :host(:focus-within) .thumb {
           box-shadow:
             0 0 0 3px color-mix(in srgb, var(--ds-effort-accent) 30%, transparent),
             0 1px 2px rgba(62, 56, 50, 0.08),
@@ -563,10 +590,77 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .trigger-value {
-          font-variant-numeric: tabular-nums;
+         font-variant-numeric: tabular-nums;
+       }
+
+        :host([inline]) {
+          --ds-effort-width: 100%;
         }
 
-        @media (max-width: 479px) {
+        :host([inline]) .shell {
+          min-height: auto;
+        }
+
+        :host([inline]) .anchor-row {
+          display: none;
+        }
+
+        :host([inline]) .panel {
+          position: static;
+          display: block !important;
+          opacity: 1;
+          transform: none;
+          width: 100%;
+          padding: 0.5rem 0 0.75rem;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
+          pointer-events: auto;
+        }
+
+        :host([inline]) .header {
+          min-height: auto;
+        }
+
+        :host([inline]) .header {
+          min-height: auto;
+        }
+
+        :host([inline]) .title > span:first-child {
+          display: none;
+        }
+
+        :host([inline]) .level-stage {
+          margin-left: 0;
+        }
+
+        :host([inline]) .axis {
+          margin-top: 0.5rem;
+        }
+
+        :host([inline]) .track-shell {
+          margin-top: 0.5rem;
+        }
+
+        :host([inline]) .track-shell {
+          margin-top: 0.5rem;
+        }
+
+        :host([inline]) .track {
+          box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l1, rgba(76, 70, 65, 0.12));
+        }
+
+        :host([inline]) .tick {
+          opacity: 1;
+        }
+
+        :host([inline]) .help-button {
+          width: 2rem;
+          height: 2rem;
+        }
+
+       @media (max-width: 479px) {
           :host {
             --ds-effort-width: calc(100vw - 1.5rem);
           }
@@ -621,7 +715,7 @@ class DsEffortSlider extends HTMLElement {
               <span>Effort</span>
               <span class="level-stage" aria-live="polite" aria-atomic="true">
                 <span class="level-outgoing" aria-hidden="true"></span>
-                <span class="level-current">Default</span>
+                <span class="level-current">Off</span>
               </span>
             </div>
             <div class="help-wrap">
@@ -648,9 +742,8 @@ class DsEffortSlider extends HTMLElement {
               <div class="track-fill"></div>
               <div class="max-fallback"></div>
               <canvas class="pixel-field"></canvas>
-              <div class="ticks">
-                ${LEVELS.map(() => '<span class="tick"></span>').join("")}
-              </div>
+              <div class="ticks"></div>
+              <div class="thumb"></div>
             </div>
             <input
               class="range"
@@ -673,8 +766,14 @@ class DsEffortSlider extends HTMLElement {
     this._input = this.shadowRoot.querySelector(".range");
     this._track = this.shadowRoot.querySelector(".track");
     this._canvas = this.shadowRoot.querySelector(".pixel-field");
+    this._ticksEl = this.shadowRoot.querySelector(".ticks");
+    this._thumb = this.shadowRoot.querySelector(".thumb");
     this._currentLabel = this.shadowRoot.querySelector(".level-current");
     this._outgoingLabel = this.shadowRoot.querySelector(".level-outgoing");
+    this._titlePrefix = this.shadowRoot.querySelector(".title > span:first-child");
+    this._axisLow = this.shadowRoot.querySelector(".axis span:first-child");
+    this._axisHigh = this.shadowRoot.querySelector(".axis span:last-child");
+    this._tooltipText = this.shadowRoot.querySelector(".tooltip");
     this._trigger = this.shadowRoot.querySelector(".trigger");
     this._triggerValue = this.shadowRoot.querySelector(".trigger-value");
     this._helpWrap = this.shadowRoot.querySelector(".help-wrap");
@@ -688,14 +787,17 @@ class DsEffortSlider extends HTMLElement {
     this._events?.abort();
     this._events = new AbortController();
     const { signal } = this._events;
+    this._syncLevels();
     const initialValue = Number.parseFloat(this.getAttribute("value") ?? "0");
     this._setValue(Number.isFinite(initialValue) ? initialValue : 0, {
       animateLabel: false,
       reflect: false,
     });
-    this._syncOpenState();
-    this._syncDisabledState();
-    this._parseSupported();
+   this._syncOpenState();
+   this._syncDisabledState();
+   this._parseSupported();
+    this._syncInlineState();
+    this._syncTexts();
 
     this._input.addEventListener("pointerdown", (event) => this._onPointerDown(event), { signal });
     this._input.addEventListener("pointerup", (event) => this._onPointerUp(event), { signal });
@@ -708,7 +810,7 @@ class DsEffortSlider extends HTMLElement {
       this._helpWrap.toggleAttribute("data-tip-open");
     }, { signal });
     this.shadowRoot.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && this.open) {
+      if (event.key === "Escape" && this.open && !this.hasAttribute("inline")) {
         event.preventDefault();
         this.close();
         this._trigger.focus();
@@ -737,6 +839,7 @@ class DsEffortSlider extends HTMLElement {
     this._dragging = false;
     this._pointerSamples = [];
     this.removeAttribute("data-closing");
+    this.removeAttribute("data-dragging");
     this._panel.hidden = !this.open;
     this._currentLabel.classList.remove("is-preparing");
     this._outgoingLabel.classList.remove("is-exiting");
@@ -754,6 +857,13 @@ class DsEffortSlider extends HTMLElement {
     }
     if (name === "open" && this._trigger) this._syncOpenState();
     if (name === "disabled" && this._input) this._syncDisabledState();
+    if (name === "inline" && this._panel) this._syncInlineState();
+    if (
+      name === "label" || name === "axis-low" || name === "axis-high" ||
+      name === "tooltip" || name === "input-aria-label" || name === "help-aria-label"
+    ) {
+      this._syncTexts();
+    }
     if (name === "supported") this._parseSupported();
   }
 
@@ -766,7 +876,8 @@ class DsEffortSlider extends HTMLElement {
   }
 
   get level() {
-    return LEVELS[this._levelIndex];
+    const level = this._levels[this._levelIndex];
+    return level ? level.label : "";
   }
 
   get open() {
@@ -797,10 +908,65 @@ class DsEffortSlider extends HTMLElement {
     this.setAttribute("supported", JSON.stringify(value));
   }
 
+  get levels() {
+    return this._levels;
+  }
+
+  set levels(list) {
+    if (!Array.isArray(list) || list.length === 0) return;
+    this._levels = list.map((item, index) =>
+      typeof item === "string"
+        ? { label: item, id: void 0, canonical: void 0, rank: index }
+        : {
+            label: String(item.label ?? ""),
+            id: item.id,
+            canonical: item.canonical,
+            rank: item.rank ?? index,
+          },
+    );
+    this._syncLevels();
+  }
+
+  _syncLevels() {
+    if (!this._ticksEl) return;
+    this._ticksEl.textContent = "";
+    this._ticks = [];
+    for (let i = 0; i < this._levels.length; i += 1) {
+      const tick = document.createElement("span");
+      tick.className = "tick";
+      this._ticksEl.appendChild(tick);
+      this._ticks.push(tick);
+    }
+    this._input.max = String(this._levels.length - 1);
+    this._supportedSet = new Set(this._levels.map((_, i) => i));
+    this._syncTickStates();
+    this._setValue(this._value, { animateLabel: false, reflect: false });
+  }
+
+  _syncTickStates() {
+    this.toggleAttribute(
+      "data-max-supported",
+      this._levels.some((level) => level.canonical === "max"),
+    );
+    for (let i = 0; i < this._ticks.length; i += 1) {
+      const tick = this._ticks[i];
+      tick.style.setProperty("--tick-frac", String(this._valueToDisplay(i)));
+      tick.toggleAttribute("data-disabled", !this._isSupported(i));
+    }
+  }
+
+  // Map a continuous value to a linear track fraction across the fixed levels.
+  _valueToDisplay(value) {
+    const n = this._levels.length;
+    const idx = clamp(Number.isFinite(value) ? value : 0, 0, n - 1);
+    if (n <= 1) return 0.5;
+    return idx / (n - 1);
+  }
+
   _parseSupported() {
     const raw = this.getAttribute("supported");
-    const allIndices = LEVELS.map((_, i) => i);
-    let set = new Set(allIndices); // fallback: all 6 supported
+    const allIndices = this._levels.map((_, i) => i);
+    let set = new Set(allIndices);
     if (raw) {
       let parsed = null;
       try {
@@ -810,7 +976,7 @@ class DsEffortSlider extends HTMLElement {
       }
       if (Array.isArray(parsed) && parsed.length) {
         const booleanList =
-          parsed.length === LEVELS.length &&
+          parsed.length === this._levels.length &&
           parsed.every((entry) => typeof entry === "boolean");
         const candidate = new Set();
         parsed.forEach((entry, index) => {
@@ -826,9 +992,10 @@ class DsEffortSlider extends HTMLElement {
     // index 0 (Default) is ALWAYS treated as supported.
     set.add(0);
     for (const index of Array.from(set)) {
-      if (index < 0 || index >= LEVELS.length || !Number.isInteger(index)) set.delete(index);
+      if (index < 0 || index >= this._levels.length || !Number.isInteger(index)) set.delete(index);
     }
     this._supportedSet = new Set([...set].sort((a, b) => a - b));
+    if (this._ticks.length) this._syncTickStates();
   }
 
   _isSupported(index) {
@@ -853,11 +1020,11 @@ class DsEffortSlider extends HTMLElement {
   // Nearest supported index in a given direction from current.
   _stepSupported(from, delta) {
     const set = this._supportedSet;
-    if (!set || !set.size) return clamp(from + delta, 0, LEVELS.length - 1);
+    if (!set || !set.size) return clamp(from + delta, 0, this._levels.length - 1);
     const source = Math.round(from);
     if (delta === 0) return source;
     let index = source + (delta > 0 ? 1 : -1);
-    while (index >= 0 && index < LEVELS.length) {
+    while (index >= 0 && index < this._levels.length) {
       if (set.has(index)) return index;
       index += delta > 0 ? 1 : -1;
     }
@@ -905,13 +1072,28 @@ class DsEffortSlider extends HTMLElement {
 
   _syncOpenState() {
     const isOpen = this.open;
-    this._trigger.setAttribute("aria-expanded", String(isOpen));
-    this._panel.inert = !isOpen;
+    const inline = this.hasAttribute("inline");
+    if (!inline) {
+      this._trigger.setAttribute("aria-expanded", String(isOpen));
+      this._panel.inert = !isOpen;
+    }
     if (isOpen) {
       this._panel.hidden = false;
       effortTiming.timeout(() => this._resizeCanvas(), 16);
-    } else if (!this.hasAttribute("data-closing")) {
+    } else if (!inline && !this.hasAttribute("data-closing")) {
       this._panel.hidden = true;
+    }
+  }
+
+  _syncInlineState() {
+    const inline = this.hasAttribute("inline");
+    if (!this._panel) return;
+    if (inline) {
+      this._panel.hidden = false;
+      this._panel.inert = false;
+      this.removeAttribute("data-closing");
+      this._cancelTimer("_closeTimer");
+      effortTiming.timeout(() => this._resizeCanvas(), 16);
     }
   }
 
@@ -922,20 +1104,33 @@ class DsEffortSlider extends HTMLElement {
     this._helpButton.disabled = isDisabled;
   }
 
+  _syncTexts() {
+    if (!this._titlePrefix) return;
+    this._titlePrefix.textContent = this.getAttribute("label") || "Effort";
+    this._axisLow.textContent = this.getAttribute("axis-low") || "Faster";
+    this._axisHigh.textContent = this.getAttribute("axis-high") || "Smarter";
+    this._tooltipText.textContent = this.getAttribute("tooltip") ||
+      "Higher effort spends more time reasoning. Max adds the deepest analysis and code pass.";
+    this._input.setAttribute("aria-label", this.getAttribute("input-aria-label") || "Effort level");
+    this._helpButton.setAttribute("aria-label", this.getAttribute("help-aria-label") || "About effort levels");
+  }
+
   _onDocumentPointerDown(event) {
-    if (this.open && !event.composedPath().includes(this)) this.close();
+    if (this.open && !this.hasAttribute("inline") && !event.composedPath().includes(this)) this.close();
   }
 
   _onPointerDown() {
     if (this.disabled) return;
     this._cancelTimer("_springFrame");
     this._dragging = true;
+    this.setAttribute("data-dragging", "");
     this._pointerSamples = [{ time: Date.now(), value: this._value }];
   }
 
   _onPointerUp() {
     if (!this._dragging) return;
     this._dragging = false;
+    this.removeAttribute("data-dragging");
     this._snapToNearest();
   }
 
@@ -974,12 +1169,7 @@ class DsEffortSlider extends HTMLElement {
   }
 
   _magnetTargets() {
-    const set = this._supportedSet;
-    if (!set || !set.size) {
-      // fallback: magnetize to every integer index (original behaviour)
-      return LEVELS.map((_, i) => i);
-    }
-    return Array.from(set);
+    return this._levels.map((_, i) => i);
   }
 
   _onKeyDown(event) {
@@ -990,7 +1180,7 @@ class DsEffortSlider extends HTMLElement {
       ArrowRight: 1,
       ArrowUp: 1,
       Home: 0,
-      End: LEVELS.length - 1,
+      End: this._levels.length - 1,
       PageDown: -1,
       PageUp: 1,
     };
@@ -998,11 +1188,11 @@ class DsEffortSlider extends HTMLElement {
     event.preventDefault();
     let target;
     if (event.key === "Home") {
-      target = this._nearestSupportedFrom(0);
+      target = 0;
     } else if (event.key === "End") {
-      target = this._nearestSupportedFrom(LEVELS.length - 1);
+      target = this._levels.length - 1;
     } else {
-      target = this._stepSupported(this._value, keyTargets[event.key]);
+      target = clamp(Math.round(this._value) + keyTargets[event.key], 0, this._levels.length - 1);
     }
     this._setValue(target, { animateLabel: false, reflect: true });
     this._emit("input");
@@ -1025,8 +1215,7 @@ class DsEffortSlider extends HTMLElement {
   }
 
   _snapToNearest() {
-    let target = Math.round(this._value);
-    target = this._nearestSupported(target);
+    const target = Math.round(this._value);
 
     if (this._reducedMotion.matches || Math.abs(target - this._value) < 0.001) {
       this._setValue(target, { animateLabel: false, reflect: true });
@@ -1058,7 +1247,7 @@ class DsEffortSlider extends HTMLElement {
       previousTime = time;
       const acceleration = -stiffness * (position - target) - damping * velocity;
       velocity += acceleration * delta;
-      position = clamp(position + velocity * delta, 0, LEVELS.length - 1);
+      position = clamp(position + velocity * delta, 0, this._levels.length - 1);
       this._setValue(position, { animateLabel: true, reflect: false });
 
       if (Math.abs(position - target) < 0.001 && Math.abs(velocity) < 0.01) {
@@ -1072,27 +1261,28 @@ class DsEffortSlider extends HTMLElement {
   }
 
   _setValue(nextValue, { animateLabel = true, reflect = false } = {}) {
-    const safeValue = clamp(Number.isFinite(nextValue) ? nextValue : 0, 0, LEVELS.length - 1);
-    const nextIndex = clamp(Math.round(safeValue), 0, LEVELS.length - 1);
+    const safeValue = clamp(Number.isFinite(nextValue) ? nextValue : 0, 0, this._levels.length - 1);
+    const nextIndex = clamp(Math.round(safeValue), 0, this._levels.length - 1);
     const previousIndex = this._levelIndex;
+    const level = this._levels[nextIndex];
     this._value = safeValue;
     this._input.value = String(safeValue);
-    this._input.setAttribute("aria-valuetext", LEVELS[nextIndex]);
+    this._input.setAttribute("aria-valuetext", level ? level.label : "");
     this.style.setProperty(
       "--ds-effort-progress",
-      String(safeValue / (LEVELS.length - 1)),
+      String(this._valueToDisplay(safeValue)),
     );
 
     if (nextIndex !== previousIndex) {
       this._levelIndex = nextIndex;
-      this._swapLabel(LEVELS[nextIndex], nextIndex > previousIndex, animateLabel);
-    } else if (!this._currentLabel.textContent) {
-      this._currentLabel.textContent = LEVELS[nextIndex];
+      this._swapLabel(level ? level.label : "", nextIndex > previousIndex, animateLabel);
+    } else if (this._currentLabel.textContent !== (level ? level.label : "")) {
+      this._currentLabel.textContent = level ? level.label : "";
     }
 
-    this._triggerValue.textContent = LEVELS[nextIndex];
-    this._trigger.setAttribute("aria-label", `Effort level: ${LEVELS[nextIndex]}`);
-    this._setMax(nextIndex === LEVELS.length - 1);
+    this._triggerValue.textContent = level ? level.label : "";
+    this._trigger.setAttribute("aria-label", `Effort level: ${level ? level.label : ""}`);
+    this._setMax(Boolean(level && level.canonical === "max"));
 
     if (reflect) {
       this._reflectingValue = true;
@@ -1377,7 +1567,7 @@ class DsEffortSlider extends HTMLElement {
         composed: true,
         detail: {
           index: this._levelIndex,
-          level: LEVELS[this._levelIndex],
+          level: this._levels[this._levelIndex] ? this._levels[this._levelIndex].label : "",
           value: this._value,
         },
       }),
@@ -1388,7 +1578,6 @@ class DsEffortSlider extends HTMLElement {
 if (!customElements.get("ds-effort-slider")) {
   customElements.define("ds-effort-slider", DsEffortSlider);
 }
-
 // __DS_EFFORT_STANDALONE_BOOTSTRAP__ (standalone browser only — stripped from
 // the dynamic client half, where native timer globals are unavailable):
 // assign the native-timer adapter so the standalone demo animates.
