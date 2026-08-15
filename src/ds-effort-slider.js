@@ -998,7 +998,6 @@ class DsEffortSlider extends HTMLElement {
     this._input = this.shadowRoot.querySelector(".range");
     this._track = this.shadowRoot.querySelector(".track");
     this._canvas = this.shadowRoot.querySelector(".pixel-field");
-    this._glowCanvas = document.createElement("canvas");
     this._ticksEl = this.shadowRoot.querySelector(".ticks");
     this._thumb = this.shadowRoot.querySelector(".thumb");
     this._currentLabel = this.shadowRoot.querySelector(".level-current");
@@ -1585,10 +1584,6 @@ class DsEffortSlider extends HTMLElement {
       this._canvas.height = height;
       this._canvas.style.width = `${rect.width}px`;
       this._canvas.style.height = `${rect.height}px`;
-      this._glowCanvas.width = width;
-      this._glowCanvas.height = height;
-      this._glowCanvas.style.width = `${rect.width}px`;
-      this._glowCanvas.style.height = `${rect.height}px`;
       this._buildPixelGrid();
       this._drawPixelField(Date.now());
     }
@@ -1668,7 +1663,6 @@ class DsEffortSlider extends HTMLElement {
     const cells = this._pixelGrid || [];
     const cell = this._pixelCell || (width < 280 ? 5 : 6);
     const gap = this._pixelGap ?? 1.1;
-    const rows = this._pixelRows || 1;
     const elapsed = Math.max(0, time - this._maxStartedAt);
 
     // Max track palette (share-weighted).
@@ -1679,8 +1673,8 @@ class DsEffortSlider extends HTMLElement {
     const softMid = [170, 154, 206];
     const softLilac = [182, 168, 206];
     const paleCool = [194, 182, 206];
-    const highlightColor = [218, 206, 228];
-    const peakColor = [234, 226, 242];
+    const highlightColor = [196, 182, 222];
+    const peakColor = [212, 198, 234];
     const tones = [
       deepViolet, deepViolet, deepMid, deepMid,
       midPurple, midPurple, midPurple,
@@ -1691,17 +1685,6 @@ class DsEffortSlider extends HTMLElement {
     const rawFlow = elapsed / flowDuration;
     const flowCycle = Math.floor(rawFlow);
     const easedFlow = flowCycle + smoothstep(0, 1, rawFlow - flowCycle);
-
-    // Occasional diagonal cascade that sweeps left → right.
-    const cascadePeriod = 9000;
-    const cascadeT = (elapsed % cascadePeriod) / cascadePeriod;
-    const cascadeSweep = cascadeT < 0.22 ? cascadeT / 0.22 : -1;
-
-    // Bloom target: hot cells are re-drawn here, then blurred and
-    // screen-composited back over the field for a true glow.
-    const gctx = this._glowCanvas.getContext("2d");
-    gctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    gctx.clearRect(0, 0, width, height);
 
     context.save();
     context.beginPath();
@@ -1759,13 +1742,6 @@ class DsEffortSlider extends HTMLElement {
         : 0;
       lightAmount = Math.max(lightAmount, revealGlow * (0.4 + base * 0.4));
 
-      if (cascadeSweep >= 0) {
-        const diag = nX + (row / rows) * 0.55;
-        const cascadeDist = (diag - cascadeSweep) / 0.05;
-        const cascadeGlow = Math.exp(-cascadeDist * cascadeDist);
-        lightAmount = Math.max(lightAmount, cascadeGlow * (0.55 + base * 0.35));
-      }
-
       const peakHighlight =
         lightAmount > 0.4
         && irregularFlicker > 0.16
@@ -1819,22 +1795,9 @@ class DsEffortSlider extends HTMLElement {
         : revealAlpha * intensity * clamp(baseOpacity + flowingFlicker * 0.12, 0, 1);
       context.fillStyle = color;
       context.fillRect(x + gap * 0.5, y + gap * 0.5, cell - gap, cell - gap);
-
-      if (peakHighlight || hottestHighlight) {
-        gctx.globalAlpha = 1;
-        gctx.fillStyle = color;
-        gctx.fillRect(x + gap * 0.5, y + gap * 0.5, cell - gap, cell - gap);
-      }
     }
 
-    // Bloom: blur the hot-cell layer and screen-composite it over the field.
-    context.globalCompositeOperation = "lighter";
-    context.globalAlpha = 0.9;
-    context.filter = "blur(3px)";
-    context.drawImage(this._glowCanvas, 0, 0, width, height);
-    context.filter = "none";
     context.restore();
-    context.globalCompositeOperation = "source-over";
     context.globalAlpha = 1;
   }
 
