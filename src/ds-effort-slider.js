@@ -147,6 +147,10 @@ class DsEffortSlider extends HTMLElement {
           --ds-effort-level-color: #9e9e9e;
           --ds-effort-level-soft: #d6d6d6;
           --ds-effort-level-deep: #787878;
+          --light-color: #b9c7f0;
+          --light-x: 50%;
+          --light-y: 50%;
+          --light-strength: 0;
           --ds-effort-width: min(22.5rem, calc(100vw - 2rem));
           --ease-decay: cubic-bezier(0.2, 0, 0, 1);
           transition-property:
@@ -444,6 +448,63 @@ class DsEffortSlider extends HTMLElement {
           opacity: 0.05;
           pointer-events: none;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='28'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='28' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+        }
+
+        /* 光场：内层光极微弱照亮轨道内部，轮廓光稍强照亮轨道边缘 */
+        .track-light {
+          position: absolute;
+          z-index: 0;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: radial-gradient(
+            circle at var(--light-x, 50%) var(--light-y, 50%),
+            var(--light-color) 0%,
+            transparent 42%
+          );
+          opacity: calc(var(--light-strength, 0) * 0.18);
+          transition: opacity 180ms ease-out;
+        }
+
+        .track-rim {
+          position: absolute;
+          z-index: 0;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: radial-gradient(
+            circle at var(--light-x, 50%) var(--light-y, 50%),
+            var(--light-color) 0%,
+            transparent 58%
+          );
+          -webkit-mask: radial-gradient(ellipse, transparent 0%, transparent calc(100% - 4px), #000 calc(100% - 2px));
+          mask: radial-gradient(ellipse, transparent 0%, transparent calc(100% - 4px), #000 calc(100% - 2px));
+          opacity: calc(var(--light-strength, 0) * 0.3);
+          transition: opacity 180ms ease-out;
+        }
+
+        .thumb-light {
+          position: absolute;
+          z-index: 0;
+          top: 50%;
+          left: calc(
+            (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
+              * var(--ds-effort-progress, 0)
+            + var(--ds-effort-thumb-inset)
+          );
+          width: calc(var(--ds-effort-thumb-w) + 3.5rem);
+          height: calc(var(--ds-effort-thumb-h) + 1.75rem);
+          transform: translate(-50%, -50%);
+          background: radial-gradient(circle, var(--light-color) 0%, transparent 60%);
+          opacity: calc(0.1 + var(--light-strength, 0) * 0.06);
+          pointer-events: none;
+          transition: opacity 180ms ease-out;
+        }
+
+        :host([data-max]) .track-light,
+        :host([data-max]) .track-rim,
+        :host([data-max]) .thumb-light {
+          opacity: 0;
         }
 
         .track-fill {
@@ -938,6 +999,9 @@ class DsEffortSlider extends HTMLElement {
           .level-label,
           .track::before,
           .track-fill,
+          .track-light,
+          .track-rim,
+          .thumb-light,
           .range::-webkit-slider-thumb,
           .range::-moz-range-thumb,
           .trigger,
@@ -1019,6 +1083,9 @@ class DsEffortSlider extends HTMLElement {
               <div class="max-fallback"></div>
               <canvas class="pixel-field"></canvas>
               <div class="ticks"></div>
+              <div class="track-light"></div>
+              <div class="track-rim"></div>
+              <div class="thumb-light"></div>
               <div class="thumb"></div>
             </div>
             <input
@@ -1096,15 +1163,25 @@ class DsEffortSlider extends HTMLElement {
         this._trigger.focus();
       }
     }, { signal });
-    // 鼠标靠近轨道时，高亮最近刻度的标签；离开后恢复
+    // 鼠标靠近轨道时，高亮最近刻度的标签并移动光场；离开后恢复
     this._panel.addEventListener("pointermove", (event) => {
       const rect = this._track.getBoundingClientRect();
-      if (!rect.width) return;
-      const frac = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-      this._hoverIndex = Math.round(frac * (this._levels.length - 1));
+      if (!rect.width || !rect.height) return;
+      const lx = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+      const ly = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+      const dist = Math.max(
+        event.clientY < rect.top ? rect.top - event.clientY : Math.max(0, event.clientY - rect.bottom),
+        event.clientX < rect.left ? rect.left - event.clientX : Math.max(0, event.clientX - rect.right),
+      );
+      const strength = clamp(1 - dist / 70, 0, 1);
+      this.style.setProperty("--light-x", `${(lx * 100).toFixed(1)}%`);
+      this.style.setProperty("--light-y", `${(ly * 100).toFixed(1)}%`);
+      this.style.setProperty("--light-strength", strength.toFixed(3));
+      this._hoverIndex = Math.round(lx * (this._levels.length - 1));
       this._updateLabelHover();
     }, { signal });
     this._panel.addEventListener("pointerleave", () => {
+      this.style.setProperty("--light-strength", "0");
       this._hoverIndex = null;
       this._updateLabelHover();
     }, { signal });
