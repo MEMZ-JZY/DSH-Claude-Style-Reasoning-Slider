@@ -147,7 +147,7 @@ class DsEffortSlider extends HTMLElement {
           --ds-effort-level-color: #9e9e9e;
           --ds-effort-level-soft: #d6d6d6;
           --ds-effort-level-deep: #787878;
-          --light-color: #b9c7f0;
+          --light-color: #d3dcf8;
           --light-x: 50%;
           --light-y: 50%;
           --light-strength: 0;
@@ -466,7 +466,7 @@ class DsEffortSlider extends HTMLElement {
           transition: opacity 180ms ease-out;
         }
 
-        /* 轨道外轮廓：很窄的透明描边，鼠标靠近时光感增强，越近越亮 */
+        /* 轨道外轮廓：很窄的透明描边，只照亮离鼠标近的一段，远处不亮 */
         .track-outline {
           position: absolute;
           z-index: 1;
@@ -474,11 +474,15 @@ class DsEffortSlider extends HTMLElement {
           bottom: 0.5rem;
           left: -1px;
           right: -1px;
-          border: 1px solid var(--light-color);
           border-radius: calc(var(--ds-effort-track-radius) + 1px);
-          box-shadow:
-            0 0 5px 0 color-mix(in srgb, var(--light-color) 55%, transparent),
-            inset 0 0 3px 0 color-mix(in srgb, var(--light-color) 30%, transparent);
+          background: radial-gradient(
+            circle at var(--light-x, 50%) var(--light-y, 50%),
+            var(--light-color) 0%,
+            var(--light-color) 14%,
+            transparent 55%
+          );
+          -webkit-mask: radial-gradient(ellipse, transparent 0%, transparent calc(100% - 6px), #000 calc(100% - 2px));
+          mask: radial-gradient(ellipse, transparent 0%, transparent calc(100% - 6px), #000 calc(100% - 2px));
           opacity: calc(var(--light-strength, 0) * 0.55);
           pointer-events: none;
           transition: opacity 180ms ease-out;
