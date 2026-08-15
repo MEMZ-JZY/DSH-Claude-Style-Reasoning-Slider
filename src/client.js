@@ -198,6 +198,7 @@ function EffortModelSelect(props) {
   }, [appliedLevel]);
 
   const sliderIndex = chosenIndex !== null ? chosenIndex : derivedIndex;
+  const activeBars = Math.round(sliderIndex);
 
   const effortLabel = defaultChosen
     ? t("effort.providerDefault")
@@ -420,7 +421,7 @@ function EffortModelSelect(props) {
       {
         ref: triggerRef,
         type: "button",
-        className: "ds-effort-trigger",
+        className: "ds-effort-trigger" + (activeBars >= LEVELS.length - 1 ? " ds-effort-triggerMax" : ""),
         "aria-label": triggerAria,
         "aria-haspopup": "menu",
         "aria-expanded": open,
@@ -434,6 +435,14 @@ function EffortModelSelect(props) {
       },
       React.createElement("span", { className: "ds-effort-triggerLabel" }, modelLabel),
       effortLabel !== void 0 && React.createElement("span", { className: "ds-effort-triggerEffort" }, effortLabel),
+      React.createElement("span", { className: "ds-effort-triggerBars", "aria-hidden": "true" },
+        LEVELS.map((level, i) =>
+          React.createElement("span", {
+            key: i,
+            className: "ds-effort-bar" + (i <= activeBars ? " ds-effort-barOn" : ""),
+          }),
+        ),
+      ),
       React.createElement(
         "svg",
         { className: "ds-effort-chevron" + (open ? " ds-effort-chevronOpen" : ""), viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true" },
@@ -654,6 +663,16 @@ const CSS = `
 .ds-effort-trigger:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}
 .ds-effort-triggerLabel{text-overflow:ellipsis;white-space:nowrap;min-width:0;overflow:hidden}
 .ds-effort-triggerEffort{color:var(--dsw-alias-label-tertiary);flex:none}
+.ds-effort-triggerBars{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.ds-effort-bar{width:3px;border-radius:1px;background:var(--dsw-alias-label-tertiary);opacity:.35;transition:opacity .15s}
+.ds-effort-bar:nth-child(1){height:30%}
+.ds-effort-bar:nth-child(2){height:44%}
+.ds-effort-bar:nth-child(3){height:58%}
+.ds-effort-bar:nth-child(4){height:72%}
+.ds-effort-bar:nth-child(5){height:86%}
+.ds-effort-bar:nth-child(6){height:100%}
+.ds-effort-barOn{opacity:1;background:var(--dsw-alias-brand-primary)}
+.ds-effort-triggerMax{box-shadow:0 0 0 2px color-mix(in srgb,var(--dsw-alias-brand-primary) 25%,transparent)}
 .ds-effort-chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s}
 .ds-effort-chevronOpen{transform:rotate(180deg)}
 .ds-effort-menu{z-index:20;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1));width:min(256px,100vw - 32px);max-height:min(400px,100vh - 96px);box-shadow:var(--dsw-shadow-lv3,0 12px 28px rgba(0,0,0,.12));color:var(--dsw-alias-label-primary);border-radius:12px;flex-direction:column;padding:4px;display:flex;position:absolute;bottom:calc(100% + 8px);right:0;overflow:auto}

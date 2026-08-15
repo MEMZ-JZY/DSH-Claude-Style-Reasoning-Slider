@@ -7,6 +7,35 @@ const LEVELS = [
   { label: "Max", canonical: "max" },
 ];
 
+// Level identity ramp: each slider slot gets its own hue — gray → slate →
+// periwinkle → violet → magenta → vivid violet. SOFT/DEEP are the lighter and
+// darker poles used by fills and shadows. The component interpolates between
+// stops as the thumb travels, so color animates with position.
+const LEVEL_COLORS = [
+  [161, 156, 150], // Off — warm gray
+  [122, 139, 163], // Low — slate blue
+  [95, 127, 209],  // Medium — periwinkle
+  [116, 80, 200],  // High — violet
+  [160, 70, 184],  // Extra — magenta-purple
+  [145, 85, 214],  // Max — vivid violet
+];
+const LEVEL_COLORS_SOFT = [
+  [200, 196, 190],
+  [180, 192, 212],
+  [168, 184, 229],
+  [174, 154, 225],
+  [192, 143, 211],
+  [186, 153, 230],
+];
+const LEVEL_COLORS_DEEP = [
+  [114, 109, 102],
+  [88, 105, 130],
+  [60, 88, 172],
+  [84, 52, 164],
+  [126, 44, 152],
+  [106, 56, 180],
+];
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const smoothstep = (edge0, edge1, value) => {
   const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
@@ -18,6 +47,15 @@ const mixColor = (from, to, amount) =>
   `rgb(${Math.round(mix(from[0], to[0], amount))} ${Math.round(
     mix(from[1], to[1], amount),
   )} ${Math.round(mix(from[2], to[2], amount))})`;
+
+const rgb = (color) =>
+  `rgb(${Math.round(color[0])} ${Math.round(color[1])} ${Math.round(color[2])})`;
+
+const interpColor = (a, b, t) => [
+  mix(a[0], b[0], t),
+  mix(a[1], b[1], t),
+  mix(a[2], b[2], t),
+];
 
 let instanceCount = 0;
 
@@ -65,6 +103,30 @@ class DsEffortSlider extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>
+        @property --ds-effort-progress {
+          syntax: "<number>";
+          inherits: true;
+          initial-value: 0;
+        }
+
+        @property --ds-effort-level-color {
+          syntax: "<color>";
+          inherits: true;
+          initial-value: #8c73c9;
+        }
+
+        @property --ds-effort-level-soft {
+          syntax: "<color>";
+          inherits: true;
+          initial-value: #c0b5dc;
+        }
+
+        @property --ds-effort-level-deep {
+          syntax: "<color>";
+          inherits: true;
+          initial-value: #5a3f8f;
+        }
+
         :host {
           --ds-effort-accent: var(--dsw-alias-brand-primary, #8c73c9);
           --ds-effort-accent-deep: var(--dsw-alias-brand-primary-hover, #a17ec2);
@@ -82,6 +144,10 @@ class DsEffortSlider extends HTMLElement {
           --ds-effort-surface: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-1, #ffffff));
           --ds-effort-outline: var(--dsw-alias-border-l1, rgba(76, 70, 65, 0.12));
           --ds-effort-blue: #2788d6;
+          --ds-effort-level-color: #8c73c9;
+          --ds-effort-level-soft: #c0b5dc;
+          --ds-effort-level-deep: #5a3f8f;
+          --thumb-stretch: 1;
           --ds-effort-width: min(22.5rem, calc(100vw - 2rem));
           --ease-decay: cubic-bezier(0.2, 0, 0, 1);
           display: block;
@@ -219,8 +285,8 @@ class DsEffortSlider extends HTMLElement {
           filter: blur(2px);
         }
 
-        :host([data-max]) .level-current {
-          color: var(--ds-effort-accent);
+        :host([data-glow]) .level-current {
+          color: var(--ds-effort-level-color);
         }
 
         .help-wrap {
@@ -338,7 +404,11 @@ class DsEffortSlider extends HTMLElement {
             + (var(--ds-effort-thumb-inset) + var(--ds-effort-thumb-w) * 0.5)
           );
           border-radius: calc(var(--ds-effort-track-radius) - 1px) 0 0 calc(var(--ds-effort-track-radius) - 1px);
-          background: var(--ds-effort-track-fill);
+          background: linear-gradient(
+            90deg,
+            var(--ds-effort-level-soft),
+            var(--ds-effort-level-color)
+          );
           pointer-events: none;
           transition-property: opacity;
           transition-duration: 200ms;
@@ -358,12 +428,12 @@ class DsEffortSlider extends HTMLElement {
           background: linear-gradient(
             90deg,
             #eeebe9 0%,
-            #ece9e7 18%,
-            #e2dce3 32%,
-            #d9d0df 48%,
-            #d0c1da 68%,
-            #cdbcd9 82%,
-            #cbbad8 100%
+            #e6e0ea 14%,
+            #d8c9ec 30%,
+            #c5a8e4 48%,
+            #b08ddc 68%,
+            #9d74d2 85%,
+            #8f63cd 100%
           );
           opacity: 0;
           transition-property: opacity;
@@ -392,12 +462,12 @@ class DsEffortSlider extends HTMLElement {
           background: linear-gradient(
             90deg,
             #eeebe9 0%,
-            #ece9e7 18%,
-            #e2dce3 32%,
-            #d5cadc 48%,
-            #c8b5d4 68%,
-            #bda6cc 82%,
-            #b59bc6 100%
+            #e6e0ea 14%,
+            #d8c9ec 30%,
+            #c5a8e4 48%,
+            #b08ddc 68%,
+            #9d74d2 85%,
+            #8f63cd 100%
           );
         }
 
@@ -434,6 +504,12 @@ class DsEffortSlider extends HTMLElement {
         .tick[data-disabled] {
           background: rgba(128, 128, 128, 0.22);
           opacity: 0.45;
+        }
+
+        .tick.on {
+          background: var(--ds-effort-level-color);
+          box-shadow: 0 0 4px color-mix(in srgb, var(--ds-effort-level-color) 60%, transparent);
+          opacity: 0.95;
         }
 
         :host([data-max-supported]) .tick:last-child {
@@ -511,28 +587,92 @@ class DsEffortSlider extends HTMLElement {
           );
           width: var(--ds-effort-thumb-w);
           height: var(--ds-effort-thumb-h);
-          border: 1px solid rgba(76, 70, 65, 0.13);
+          border: 1px solid rgba(76, 70, 65, 0.15);
           border-radius: 0.5rem;
-          background: #fff;
+          background: linear-gradient(
+            180deg,
+            #ffffff,
+            color-mix(in srgb, var(--ds-effort-level-soft) 22%, #ffffff) 52%,
+            color-mix(in srgb, var(--ds-effort-level-soft) 42%, #f5f4f2)
+          );
           box-shadow:
-            0 1px 2px rgba(62, 56, 50, 0.08),
-            0 4px 10px rgba(62, 56, 50, 0.055);
+            inset 0 1px 0 rgba(255, 255, 255, 0.95),
+            inset 0 -1px 1px rgba(76, 70, 65, 0.05),
+            0 1px 2px rgba(62, 56, 50, 0.1),
+            0 4px 10px rgba(62, 56, 50, 0.06);
           pointer-events: none;
           transform: translateY(-50%);
-          transition-property: transform;
-          transition-duration: 150ms;
+          transition-property: transform, box-shadow, background, border-color;
+          transition-duration: 180ms;
           transition-timing-function: ease-out;
         }
 
+        .thumb::before,
+        .thumb::after {
+          content: "";
+          position: absolute;
+          top: 50%;
+          width: 1px;
+          height: 38%;
+          border-radius: 999px;
+          background: rgba(76, 70, 65, 0.2);
+          opacity: 0;
+          transform: translateY(-50%);
+          transition-property: opacity;
+          transition-duration: 140ms;
+          transition-timing-function: ease-out;
+        }
+
+        .thumb::before { left: 42%; }
+        .thumb::after { right: 42%; }
+
+        :host(:hover) .thumb::before,
+        :host(:hover) .thumb::after,
+        :host(:focus-within) .thumb::before,
+        :host(:focus-within) .thumb::after,
+        :host([data-dragging]) .thumb::before,
+        :host([data-dragging]) .thumb::after {
+          opacity: 1;
+        }
+
         :host([data-dragging]) .thumb {
-          transform: translateY(-50%) scale(0.96);
+          transform: translateY(-50%) scaleX(var(--thumb-stretch, 1)) scaleY(calc(1 / var(--thumb-stretch, 1)));
+          transition-property: none;
         }
 
         :host(:focus-within) .thumb {
           box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.95),
+            inset 0 -1px 1px rgba(76, 70, 65, 0.05),
             0 0 0 3px color-mix(in srgb, var(--ds-effort-accent) 30%, transparent),
-            0 1px 2px rgba(62, 56, 50, 0.08),
-            0 4px 10px rgba(62, 56, 50, 0.055);
+            0 1px 2px rgba(62, 56, 50, 0.1),
+            0 4px 10px rgba(62, 56, 50, 0.06);
+        }
+
+        :host([data-glow]) .thumb {
+          border-color: color-mix(in srgb, var(--ds-effort-level-color) 50%, transparent);
+          background: linear-gradient(
+            180deg,
+            #ffffff,
+            color-mix(in srgb, var(--ds-effort-level-soft) 34%, #ffffff) 55%,
+            color-mix(in srgb, var(--ds-effort-level-soft) 58%, #f0eeec)
+          );
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.95),
+            inset 0 -1px 1px color-mix(in srgb, var(--ds-effort-level-deep) 10%, transparent),
+            0 0 0 3px color-mix(in srgb, var(--ds-effort-level-color) 24%, transparent),
+            0 1px 2px rgba(62, 56, 50, 0.1),
+            0 4px 10px rgba(62, 56, 50, 0.06);
+        }
+
+        @keyframes ds-effort-thumb-bounce {
+          0% { transform: translateY(-50%) scale(1.12, 0.9); }
+          55% { transform: translateY(-50%) scale(0.94, 1.07); }
+          100% { transform: translateY(-50%) scale(1, 1); }
+        }
+
+        .thumb.bounce {
+          animation: ds-effort-thumb-bounce 200ms var(--ease-decay);
         }
 
         :host([disabled]) {
@@ -555,6 +695,9 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
           width: max-content;
           min-width: 0;
           min-height: 2.75rem;
@@ -590,8 +733,38 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .trigger-value {
-         font-variant-numeric: tabular-nums;
-       }
+          font-variant-numeric: tabular-nums;
+        }
+
+        .trigger-bars {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 0.875rem;
+          flex: none;
+        }
+
+        .trigger-bar {
+          width: 3px;
+          border-radius: 1px;
+          background: var(--ds-effort-track-fill);
+          opacity: 0.85;
+          transition-property: background-color, box-shadow;
+          transition-duration: 180ms;
+          transition-timing-function: var(--ease-decay);
+        }
+
+        .trigger-bar:nth-child(1) { height: 30%; }
+        .trigger-bar:nth-child(2) { height: 44%; }
+        .trigger-bar:nth-child(3) { height: 58%; }
+        .trigger-bar:nth-child(4) { height: 72%; }
+        .trigger-bar:nth-child(5) { height: 86%; }
+        .trigger-bar:nth-child(6) { height: 100%; }
+
+        .trigger-bar.on {
+          background: var(--ds-effort-level-color);
+          box-shadow: 0 0 5px color-mix(in srgb, var(--ds-effort-level-color) 55%, transparent);
+        }
 
         :host([inline]) {
           --ds-effort-width: 100%;
@@ -681,6 +854,8 @@ class DsEffortSlider extends HTMLElement {
           .range::-webkit-slider-thumb,
           .range::-moz-range-thumb,
           .trigger,
+          .trigger-bar,
+          .thumb,
           .help-button,
           .tooltip {
             transition-duration: 0.001ms;
@@ -706,6 +881,9 @@ class DsEffortSlider extends HTMLElement {
             aria-label="Effort level: Default"
           >
             <span class="trigger-value">Default</span>
+            <span class="trigger-bars" aria-hidden="true">
+              ${LEVELS.map(() => '<span class="trigger-bar"></span>').join("")}
+            </span>
           </button>
         </div>
 
@@ -776,6 +954,7 @@ class DsEffortSlider extends HTMLElement {
     this._tooltipText = this.shadowRoot.querySelector(".tooltip");
     this._trigger = this.shadowRoot.querySelector(".trigger");
     this._triggerValue = this.shadowRoot.querySelector(".trigger-value");
+    this._bars = this.shadowRoot.querySelectorAll(".trigger-bar");
     this._helpWrap = this.shadowRoot.querySelector(".help-wrap");
     this._helpButton = this.shadowRoot.querySelector(".help-button");
 
@@ -815,6 +994,9 @@ class DsEffortSlider extends HTMLElement {
         this.close();
         this._trigger.focus();
       }
+    }, { signal });
+    this._thumb.addEventListener("animationend", () => {
+      this._thumb.classList.remove("bounce");
     }, { signal });
 
     document.addEventListener("pointerdown", this._onDocumentPointerDown, true);
@@ -1142,6 +1324,13 @@ class DsEffortSlider extends HTMLElement {
       const now = Date.now();
       this._pointerSamples.push({ time: now, value: nextValue });
       this._pointerSamples = this._pointerSamples.filter((sample) => now - sample.time < 90).slice(-5);
+      if (this._pointerSamples.length >= 2) {
+        const prev = this._pointerSamples.at(-2);
+        const last = this._pointerSamples.at(-1);
+        const dt = Math.max((last.time - prev.time) / 1000, 0.008);
+        const velocity = (last.value - prev.value) / dt;
+        this._setThumbStretch(velocity);
+      }
     }
     this._setValue(nextValue, { animateLabel: true, reflect: false });
     this._emit("input");
@@ -1254,10 +1443,47 @@ class DsEffortSlider extends HTMLElement {
         this._cancelTimer("_springFrame");
         this._setValue(target, { animateLabel: false, reflect: true });
         this._emit("change");
+        this._bounceThumb();
         return;
       }
     };
     this._springFrame = effortTiming.raf(step);
+  }
+
+  _setThumbStretch(velocity) {
+    const stretch = 1 + clamp(Math.abs(velocity) * 0.045, 0, 0.22);
+    this.style.setProperty("--thumb-stretch", String(stretch.toFixed(3)));
+  }
+
+  _bounceThumb() {
+    if (this._reducedMotion.matches || !this._thumb) return;
+    this._thumb.classList.remove("bounce");
+    void this._thumb.offsetWidth;
+    this._thumb.classList.add("bounce");
+  }
+
+  _levelColorAt(value) {
+    const v = clamp(Number.isFinite(value) ? value : 0, 0, this._levels.length - 1);
+    const i = Math.floor(v);
+    const t = smoothstep(0, 1, v - i);
+    const n = Math.min(i + 1, this._levels.length - 1);
+    return {
+      base: interpColor(LEVEL_COLORS[i], LEVEL_COLORS[n], t),
+      soft: interpColor(LEVEL_COLORS_SOFT[i], LEVEL_COLORS_SOFT[n], t),
+      deep: interpColor(LEVEL_COLORS_DEEP[i], LEVEL_COLORS_DEEP[n], t),
+    };
+  }
+
+  _updateTicks(activeIndex) {
+    if (!this._ticks) return;
+    this._ticks.forEach((tick, i) => {
+      tick.classList.toggle("on", i <= activeIndex && this._isSupported(i));
+    });
+  }
+
+  _updateTriggerBars(activeIndex) {
+    if (!this._bars) return;
+    this._bars.forEach((bar, i) => bar.classList.toggle("on", i <= activeIndex));
   }
 
   _setValue(nextValue, { animateLabel = true, reflect = false } = {}) {
@@ -1273,12 +1499,22 @@ class DsEffortSlider extends HTMLElement {
       String(this._valueToDisplay(safeValue)),
     );
 
+    const color = this._levelColorAt(safeValue);
+    this.style.setProperty("--ds-effort-level-color", rgb(color.base));
+    this.style.setProperty("--ds-effort-level-soft", rgb(color.soft));
+    this.style.setProperty("--ds-effort-level-deep", rgb(color.deep));
+    this.setAttribute("data-level", String(nextIndex));
+    this.toggleAttribute("data-glow", nextIndex >= 3);
+
     if (nextIndex !== previousIndex) {
       this._levelIndex = nextIndex;
       this._swapLabel(level ? level.label : "", nextIndex > previousIndex, animateLabel);
     } else if (this._currentLabel.textContent !== (level ? level.label : "")) {
       this._currentLabel.textContent = level ? level.label : "";
     }
+
+    this._updateTicks(nextIndex);
+    this._updateTriggerBars(nextIndex);
 
     this._triggerValue.textContent = level ? level.label : "";
     this._trigger.setAttribute("aria-label", `Effort level: ${level ? level.label : ""}`);
@@ -1409,14 +1645,14 @@ class DsEffortSlider extends HTMLElement {
 
     // Max track palette (share-weighted).
     const leftColor = [210, 206, 214];
-    const deepViolet = [156, 120, 192];
-    const deepMid = [156, 132, 192];
-    const midPurple = [168, 144, 204];
-    const softMid = [168, 156, 204];
-    const softLilac = [180, 168, 204];
-    const paleCool = [192, 180, 204];
-    const highlightColor = [216, 204, 228];
-    const peakColor = [232, 224, 242];
+    const deepViolet = [150, 96, 205];
+    const deepMid = [156, 118, 200];
+    const midPurple = [166, 140, 206];
+    const softMid = [170, 154, 206];
+    const softLilac = [182, 168, 206];
+    const paleCool = [194, 182, 206];
+    const highlightColor = [218, 206, 228];
+    const peakColor = [234, 226, 242];
         const tones = [
       deepViolet, deepViolet, deepMid, deepMid,
       midPurple, midPurple, midPurple,
