@@ -316,6 +316,26 @@ class DsEffortSlider extends HTMLElement {
           color: var(--ds-effort-level-color);
         }
 
+        :host([data-level="3"]) .level-current {
+          background: linear-gradient(90deg, #9ec2ff, #6aa2ff, #9ec2ff);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: ds-effort-level-flow 4s linear infinite;
+          transition-property: opacity, transform, filter;
+        }
+
+        :host([data-level="4"]) .level-current {
+          background: linear-gradient(90deg, #c79bfb, #ad79f6, #c79bfb);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: ds-effort-level-flow 4s linear infinite;
+          transition-property: opacity, transform, filter;
+        }
+
         :host([data-max]) .level-current,
         :host([data-max]) .trigger-value {
           background: linear-gradient(90deg, #c9b9ea, #ae9aef, #a2c1ff, #c5b0f4, #c9b9ea);
@@ -543,12 +563,12 @@ class DsEffortSlider extends HTMLElement {
           border-radius: inherit;
           background: linear-gradient(
             90deg,
-            #eeebe9 0%,
-            #e6e0ea 14%,
-            #d8c9ec 30%,
-            #c5a8e4 48%,
-            #b08ddc 68%,
-            #9d74d2 85%,
+            transparent 0%,
+            transparent 22%,
+            #d8c9ec 36%,
+            #c5a8e4 52%,
+            #b08ddc 70%,
+            #9d74d2 86%,
             #8f63cd 100%
           );
           opacity: 0;
@@ -577,12 +597,12 @@ class DsEffortSlider extends HTMLElement {
         .max-fallback {
           background: linear-gradient(
             90deg,
-            #eeebe9 0%,
-            #e6e0ea 14%,
-            #d8c9ec 30%,
-            #c5a8e4 48%,
-            #b08ddc 68%,
-            #9d74d2 85%,
+            transparent 0%,
+            transparent 22%,
+            #d8c9ec 36%,
+            #c5a8e4 52%,
+            #b08ddc 70%,
+            #9d74d2 86%,
             #8f63cd 100%
           );
         }
@@ -981,6 +1001,13 @@ class DsEffortSlider extends HTMLElement {
           :host([data-max]) .trigger-value {
             background: none;
             color: var(--ds-effort-accent);
+            animation: none;
+          }
+
+          :host([data-level="3"]) .level-current,
+          :host([data-level="4"]) .level-current {
+            background: none;
+            color: var(--ds-effort-level-color);
             animation: none;
           }
 
