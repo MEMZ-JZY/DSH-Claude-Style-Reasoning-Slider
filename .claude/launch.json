@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "4173", "--bind", "127.0.0.1"],
       "port": 4173
+    },
+    {
+      "name": "other-repo-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4174", "--bind", "127.0.0.1", "--directory", "C:/Users/memzb/AppData/Local/Temp/dsh-reasoning-effort"],
+      "port": 4174
     }
   ]
 }

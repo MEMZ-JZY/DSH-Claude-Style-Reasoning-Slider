@@ -662,7 +662,7 @@ const CSS = `
 .ds-effort-trigger:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}
 .ds-effort-triggerLabel{text-overflow:ellipsis;white-space:nowrap;min-width:0;overflow:hidden}
 .ds-effort-triggerEffort{color:var(--dsw-alias-label-tertiary);flex:none}
-.ds-effort-triggerMax .ds-effort-triggerEffort{background:linear-gradient(90deg,#b39ad6,#9d86e0,#8bb0ff,#a88fe8,#b39ad6);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ds-effort-trigger-flow 3.2s linear infinite}
+.ds-effort-triggerMax .ds-effort-triggerEffort{background:linear-gradient(90deg,#c9b9ea,#ae9aef,#a2c1ff,#c5b0f4,#c9b9ea);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ds-effort-trigger-flow 3.2s linear infinite}
 @keyframes ds-effort-trigger-flow{to{background-position:200% center}}
 .ds-effort-chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .12s}
 .ds-effort-chevronOpen{transform:rotate(180deg)}
