@@ -90,7 +90,6 @@ class DsEffortSlider extends HTMLElement {
     this._ticks = [];
     this._dragging = false;
     this._canvasFrame = 0;
-    this._maxSweepTimer = 0;
     this._labelFrame = 0;
     this._labelTimer = 0;
     this._closeTimer = 0;
@@ -533,44 +532,6 @@ class DsEffortSlider extends HTMLElement {
           opacity: 0;
         }
 
-        /* 进入 Max 时，一条较深的紫色带从轨道后端向前端扫过 */
-        .track-sweep {
-          position: absolute;
-          z-index: 1;
-          top: 0;
-          bottom: 0;
-          right: 0;
-          width: 34%;
-          pointer-events: none;
-          border-radius: inherit;
-          opacity: 0;
-          background: linear-gradient(
-            90deg,
-            transparent 0%,
-            rgba(143, 98, 212, 0.55) 35%,
-            rgba(180, 140, 226, 0.75) 75%,
-            #8f62d4 100%
-          );
-        }
-
-        :host([data-max-entering]) .track-sweep {
-          animation: ds-effort-track-sweep 900ms cubic-bezier(0.45, 0, 0.55, 1) forwards;
-        }
-
-        @keyframes ds-effort-track-sweep {
-          0% {
-            opacity: 0;
-            transform: translateX(0);
-          }
-          14% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 1;
-            transform: translateX(-196%);
-          }
-        }
-
         .track-fill {
           position: absolute;
           z-index: 0;
@@ -602,15 +563,16 @@ class DsEffortSlider extends HTMLElement {
           border-radius: inherit;
           background: linear-gradient(
             90deg,
-            #e6ddf2 0%,
-            #e0d2f0 12%,
-            #d6c6ec 28%,
-            #c8b2e6 48%,
-            #b99ce0 66%,
-            #ac8adc 84%,
+            #dccdf0 0%,
+            #d4c2ee 14%,
+            #c8b2e8 32%,
+            #b99ee2 52%,
+            #aa88dc 72%,
+            #9c74d8 88%,
             #8f62d4 100%
           );
           opacity: 0;
+          transform-origin: right center;
           transition-property: opacity;
           transition-duration: 340ms;
           transition-timing-function: ease-in;
@@ -618,6 +580,16 @@ class DsEffortSlider extends HTMLElement {
 
         :host([data-max]) .track::before {
           opacity: 1;
+          animation: ds-effort-track-unfold 900ms cubic-bezier(0.35, 0, 0.25, 1) forwards;
+        }
+
+        @keyframes ds-effort-track-unfold {
+          from {
+            clip-path: inset(0 100% 0 0);
+          }
+          to {
+            clip-path: inset(0 0 0 0);
+          }
         }
 
         .max-fallback,
@@ -636,12 +608,12 @@ class DsEffortSlider extends HTMLElement {
         .max-fallback {
           background: linear-gradient(
             90deg,
-            #e6ddf2 0%,
-            #e0d2f0 12%,
-            #d6c6ec 28%,
-            #c8b2e6 48%,
-            #b99ce0 66%,
-            #ac8adc 84%,
+            #dccdf0 0%,
+            #d4c2ee 14%,
+            #c8b2e8 32%,
+            #b99ee2 52%,
+            #aa88dc 72%,
+            #9c74d8 88%,
             #8f62d4 100%
           );
         }
@@ -1054,10 +1026,6 @@ class DsEffortSlider extends HTMLElement {
             animation: none;
           }
 
-          :host([data-max-entering]) .track-sweep {
-            animation: none;
-          }
-
           .pixel-field {
             display: none;
           }
@@ -1116,7 +1084,6 @@ class DsEffortSlider extends HTMLElement {
               <div class="ticks"></div>
               <div class="track-light"></div>
               <div class="thumb-light"></div>
-              <div class="track-sweep" aria-hidden="true"></div>
               <div class="thumb"></div>
             </div>
             <div class="track-outline" aria-hidden="true"></div>
@@ -1225,7 +1192,6 @@ class DsEffortSlider extends HTMLElement {
     this._reducedMotion.removeEventListener("change", this._onReducedMotionChange);
     this._resizeObserver?.disconnect();
     this._cancelTimer("_canvasFrame");
-    this._cancelTimer("_maxSweepTimer");
     this._cancelTimer("_labelFrame");
     this._cancelTimer("_labelTimer");
     this._cancelTimer("_closeTimer");
@@ -1717,17 +1683,9 @@ class DsEffortSlider extends HTMLElement {
       this.setAttribute("data-pixels-ready", "");
       this._reveal = this._reducedMotion.matches ? 1 : 0;
       this._maxStartedAt = Date.now();
-      this.setAttribute("data-max-entering", "");
-      this._cancelTimer("_maxSweepTimer");
-      this._maxSweepTimer = effortTiming.timeout(() => {
-        this._maxSweepTimer = 0;
-        this.removeAttribute("data-max-entering");
-      }, 1000);
       this._ensureCanvasLoop();
     } else {
       this._cancelTimer("_canvasFrame");
-      this._cancelTimer("_maxSweepTimer");
-      this.removeAttribute("data-max-entering");
       this.removeAttribute("data-pixels-ready");
       this._reveal = 0;
       this._drawPixelField(Date.now());
