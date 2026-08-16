@@ -1,6 +1,6 @@
 {
   "name": "dsh-client-ui-effort-slider",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Animated reasoning-level slider for DeepSeek Harness model selection.",
   "type": "module",
   "main": "index.js",
