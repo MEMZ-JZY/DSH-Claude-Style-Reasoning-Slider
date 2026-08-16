@@ -558,11 +558,19 @@ class DsEffortSlider extends HTMLElement {
         }
 
         :host([data-level="3"]) .track-fill {
-          background: linear-gradient(90deg, rgba(130, 172, 255, 0.18), rgba(130, 172, 255, 0.1));
+          background: radial-gradient(
+            ellipse closest-side at var(--fill-x, 50%) 50%,
+            rgba(130, 172, 255, 0.24) 0%,
+            rgba(130, 172, 255, 0.08) 100%
+          );
         }
 
         :host([data-level="4"]) .track-fill {
-          background: linear-gradient(90deg, rgba(176, 140, 250, 0.18), rgba(176, 140, 250, 0.1));
+          background: radial-gradient(
+            ellipse closest-side at var(--fill-x, 50%) 50%,
+            rgba(176, 140, 250, 0.24) 0%,
+            rgba(176, 140, 250, 0.08) 100%
+          );
         }
 
         .track::before {
@@ -1616,6 +1624,7 @@ class DsEffortSlider extends HTMLElement {
       "--ds-effort-progress",
       String(this._valueToDisplay(safeValue)),
     );
+    this.style.setProperty("--fill-x", `${(this._valueToDisplay(safeValue) * 100).toFixed(1)}%`);
 
     const color = this._levelColorAt(safeValue);
     this.style.setProperty("--ds-effort-level-color", rgb(color.base));
@@ -1978,7 +1987,7 @@ class DsEffortSlider extends HTMLElement {
 
     // 明暗水波纹：亮带从中心向外传播
     const WAVE = 2;
-    const ripplePeriod = 1800;
+    const ripplePeriod = 1200;
     const ripplePhase = (elapsed % ripplePeriod) / ripplePeriod;
 
     context.save();
@@ -1996,7 +2005,7 @@ class DsEffortSlider extends HTMLElement {
       if (base > 0.55 - near * 0.3) continue;
 
       // 随机闪烁：每颗粒子亮度随时间独立起伏
-      const flicker = 0.5 + 0.5 * Math.sin(elapsed * 0.005 + tempo * Math.PI * 2 + phase * 6.28);
+      const flicker = 0.5 + 0.5 * Math.sin(elapsed * 0.012 + tempo * Math.PI * 2 + phase * 6.28);
 
       // 明暗水波纹：中心扩散的亮带，对比明显
       const wave = 0.5 + 0.5 * Math.sin((dx * WAVE - ripplePhase) * Math.PI * 2);
