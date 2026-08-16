@@ -90,6 +90,8 @@ class DsEffortSlider extends HTMLElement {
     this._ticks = [];
     this._dragging = false;
     this._canvasFrame = 0;
+    this._fieldMode = null;
+    this._rippleStart = 0;
     this._labelFrame = 0;
     this._labelTimer = 0;
     this._closeTimer = 0;
@@ -1182,6 +1184,7 @@ class DsEffortSlider extends HTMLElement {
     this._reducedMotion.removeEventListener("change", this._onReducedMotionChange);
     this._resizeObserver?.disconnect();
     this._cancelTimer("_canvasFrame");
+    this._fieldMode = null;
     this._cancelTimer("_labelFrame");
     this._cancelTimer("_labelTimer");
     this._cancelTimer("_closeTimer");
@@ -1620,7 +1623,20 @@ class DsEffortSlider extends HTMLElement {
 
     this._triggerValue.textContent = level ? level.label : "";
     this._trigger.setAttribute("aria-label", `Effort level: ${level ? level.label : ""}`);
-    this._setMax(Boolean(level && level.canonical === "max"));
+    const isMax = Boolean(level && level.canonical === "max");
+    this._setMax(isMax);
+    // High/Extra 时启动"点阵 + 水波纹"场（Max 的弱化前奏）；离开则停止
+    const mode = isMax ? "max" : nextIndex === 3 || nextIndex === 4 ? String(nextIndex) : null;
+    if (mode !== this._fieldMode) {
+      this._fieldMode = mode;
+      this._rippleStart = Date.now();
+      if (mode && mode !== "max") {
+        this._ensureCanvasLoop();
+      } else if (!mode) {
+        this._cancelTimer("_canvasFrame");
+        this._drawPixelField(Date.now());
+      }
+    }
 
     if (reflect) {
       this._reflectingValue = true;
@@ -1746,20 +1762,20 @@ class DsEffortSlider extends HTMLElement {
   }
 
   _ensureCanvasLoop() {
-    if (this._canvasFrame || !this._isMax || this._reducedMotion.matches) {
+    if (this._canvasFrame) return;
+    if (this._reducedMotion.matches) {
       this._drawPixelField(Date.now());
       return;
     }
-
     const frame = () => {
       const time = Date.now();
-      if (!this._isMax || !this.isConnected) {
+      if (!this.isConnected || !this._fieldMode || this._reducedMotion.matches) {
         this._cancelTimer("_canvasFrame");
         return;
       }
       if (time - this._lastCanvasFrame >= 33) {
         this._lastCanvasFrame = time;
-        this._reveal = smoothstep(0, 1, (time - this._maxStartedAt) / 1000);
+        if (this._isMax) this._reveal = smoothstep(0, 1, (time - this._maxStartedAt) / 1000);
         this._drawPixelField(time);
       }
     };
@@ -1774,6 +1790,10 @@ class DsEffortSlider extends HTMLElement {
     const height = this._canvas.height / ratio;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, width, height);
+    if (this._fieldMode === "3" || this._fieldMode === "4") {
+      this._drawRippleField(context, width, height, time, this._fieldMode);
+      return;
+    }
     if (!this._isMax) return;
 
     const reveal = this._reducedMotion.matches ? 1 : this._reveal;
@@ -1913,6 +1933,63 @@ class DsEffortSlider extends HTMLElement {
         : revealAlpha * intensity * clamp(baseOpacity + flowingFlicker * 0.12, 0, 1);
       context.fillStyle = color;
       context.fillRect(x + gap * 0.5, y + gap * 0.5, cell - gap, cell - gap);
+    }
+
+    context.restore();
+    context.globalAlpha = 1;
+  }
+
+  // High(3)/Extra(4) 的弱化粒子场：稀疏点阵 + 从 thumb 向两侧扩散的水波纹。
+  // 强度比 Max 弱很多，颜色区分（High 蓝 / Extra 紫），无动画循环风险。
+  _drawRippleField(context, width, height, time, mode) {
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const canvasWidth = this._canvas.width / ratio;
+    const heightCss = this._canvas.height / ratio;
+    const thumbX =
+      ((canvasWidth - this._thumb.offsetWidth) * this._valueToDisplay(this._value)) +
+      this._thumb.offsetWidth * 0.5;
+    const originX = clamp(thumbX, 4, canvasWidth - 4);
+    const centerY = heightCss / 2;
+
+    // 蓝(High) / 紫(Extra) —— 区分于 Max 的深紫像素场
+    const blue = mode === "3" ? [130, 172, 255] : [176, 140, 250];
+    const elapsed = Math.max(0, time - (this._rippleStart || 0));
+
+    // 稀疏点阵，随离 thumb 距离衰减
+    const cell = 8;
+    const columns = Math.ceil(canvasWidth / cell);
+    const rows = Math.ceil(heightCss / cell);
+    context.save();
+    context.beginPath();
+    if (typeof context.roundRect === "function") context.roundRect(0, 0, canvasWidth, heightCss, 10);
+    else context.rect(0, 0, canvasWidth, heightCss);
+    context.clip();
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const x = column * cell + cell / 2;
+        const dx = Math.abs(x - originX) / (canvasWidth * 0.5);
+        const dist = clamp(1 - dx, 0, 1);
+        const phase = Math.abs(Math.sin(column * 7.3 + row * 13.1) * 43758.5) % 1;
+        if (phase > 0.55) continue; // 稀疏：约一半的格子跳过
+        const alpha = dist * 0.22 * (0.6 + phase * 0.4);
+        context.fillStyle = `rgba(${blue[0]}, ${blue[1]}, ${blue[2]}, ${alpha.toFixed(3)})`;
+        context.fillRect(x - cell / 4, row * cell + cell / 2 - cell / 4, cell / 2, cell / 2);
+      }
+    }
+
+    // 水波纹：从 thumb 向两侧周期性扩散的同心环
+    const period = 2000;
+    const cycle = (elapsed % period) / period;
+    for (let i = 0; i < 3; i += 1) {
+      const phase = (cycle + i / 3) % 1;
+      const r = phase * (canvasWidth * 0.5);
+      const fade = 1 - phase;
+      context.beginPath();
+      context.ellipse(originX, centerY, r, Math.max(2, r * 0.25), 0, 0, Math.PI * 2);
+      context.strokeStyle = `rgba(${blue[0]}, ${blue[1]}, ${blue[2]}, ${(0.25 * fade).toFixed(3)})`;
+      context.lineWidth = 1.2;
+      context.stroke();
     }
 
     context.restore();
