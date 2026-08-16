@@ -7,6 +7,11 @@ const LEVELS = [
   { label: "Max", canonical: "max" },
 ];
 
+// 滑动变祖器（梁）feature：六档固定绑定六段，段首帧号 0/6/12/18/24/30，
+// 拖动时帧号随连续值逐帧变化，松手吸附后停在段首帧。
+const LIANG_STAGES = ["小难梁", "牢梁", "梁子", "梁圣", "梁神", "梁祖"];
+const LIANG_MAX_FRAME = 30;
+
 // Level identity: non-Max slots are deliberately monochrome — a very subtle
 // neutral gray that barely deepens with level, so the slider reads clean and
 // the only color moment is Max, which keeps its vivid violet identity (pixel
@@ -77,6 +82,8 @@ class DsEffortSlider extends HTMLElement {
       "value", "open", "disabled", "supported", "inline",
       "label", "axis-low", "axis-high", "tooltip",
       "input-aria-label", "help-aria-label",
+      "liang", "liang-asset-base", "liang-label",
+      "chibi", "chibi-sprite",
     ];
   }
 
@@ -101,6 +108,12 @@ class DsEffortSlider extends HTMLElement {
     this._isMax = false;
     this._reflectingValue = false;
     this._reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    // 梁 feature 状态
+    this._liangFrame = 0;
+    this._liangAssetBase = "/effort-slider-assets/liang-frames/";
+    this._liangLabel = "滑动变祖器";
+    // 大肥鱼 thumb feature 状态（帧循环由 CSS keyframes 驱动）
+    this._chibiSprite = "/effort-slider-assets/chibi-runner-strip.png";
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -445,6 +458,108 @@ class DsEffortSlider extends HTMLElement {
           position: relative;
           height: 2.75rem;
           margin-top: 0.5rem;
+        }
+
+        /* ---------- 滑动变祖器（梁）feature ---------- */
+        :host([liang]) .panel {
+          width: min(21rem, calc(100vw - 2rem));
+        }
+
+        .liang-portrait {
+          position: relative;
+          width: 14rem;
+          max-width: 100%;
+          margin: 0.625rem auto 0;
+          border-radius: 0.75rem;
+          overflow: hidden;
+          border: 1px solid var(--ds-effort-outline);
+          background: #1d1918;
+          aspect-ratio: 1 / 1;
+        }
+
+        .liang-canvas {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
+
+        /* 原版扫描线 + 光斑质感 */
+        .liang-portrait::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background-image:
+            repeating-linear-gradient(
+              0deg,
+              rgb(255 255 255 / 2.5%) 0 1px,
+              transparent 1px 4px
+            ),
+            radial-gradient(circle at 22% 18%, rgb(255 255 255 / 8%) 0 1px, transparent 1.5px);
+          background-size: auto, 7px 7px;
+          mix-blend-mode: soft-light;
+          opacity: 0.35;
+        }
+
+        .liang-stage {
+          font-family: "Songti SC", STSong, "SimSun", serif;
+          font-size: 1.375rem;
+          font-weight: 700;
+          line-height: 1.75rem;
+          color: var(--ds-effort-text-strong);
+        }
+
+        /* 圆点指示灯 + 文字开关 */
+        .liang-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          margin-top: 0.375rem;
+          padding: 0.125rem 0.25rem;
+          border: 0;
+          border-radius: 0.375rem;
+          background: transparent;
+          color: var(--ds-effort-muted);
+          font-size: 0.6875rem;
+          font-weight: 500;
+          line-height: 1.2;
+          letter-spacing: 0.02em;
+          cursor: pointer;
+          transition-property: color;
+          transition-duration: 150ms;
+          transition-timing-function: ease-out;
+        }
+
+        .liang-toggle:hover {
+          color: var(--ds-effort-text);
+        }
+
+        .liang-toggle:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--ds-effort-accent) 35%, transparent);
+          outline-offset: 2px;
+        }
+
+        .liang-toggle .liang-dot {
+          width: 0.5rem;
+          height: 0.5rem;
+          border-radius: 999px;
+          background: #b6b2af;
+          opacity: 0.7;
+          transition-property: background-color, box-shadow, opacity;
+          transition-duration: 180ms;
+          transition-timing-function: ease-out;
+        }
+
+        :host([liang]) .liang-toggle {
+          color: var(--ds-effort-accent);
+        }
+
+        :host([liang]) .liang-toggle .liang-dot {
+          background: var(--ds-effort-accent);
+          box-shadow: 0 0 6px color-mix(in srgb, var(--ds-effort-accent) 65%, transparent);
+          opacity: 1;
         }
 
         .track {
@@ -827,6 +942,73 @@ class DsEffortSlider extends HTMLElement {
           opacity: 0.58;
         }
 
+        /* ---------- 大肥鱼 thumb feature ---------- */
+        /* 精灵图 8 帧横向排布；thumb 变为高个子奔跑小人，
+           与 dsh-reasoning-effort 的大肥鱼逻辑一致：
+           静止 720ms 循环，拖拽 420ms 加速，reduced-motion 停帧。
+           尺寸变量放在 :host 级，轨道内其它元素共享同一几何。 */
+        :host([chibi]) {
+          --ds-effort-thumb-w: 2.5rem;
+          --ds-effort-thumb-h: 3.4375rem;
+        }
+
+        :host([chibi]) .thumb {
+          /* 左端与普通 thumb 对齐（inset 贴边）；仅限制右端防小人溢出 */
+          left: min(
+            calc(
+              (100% - var(--ds-effort-thumb-w) - (var(--ds-effort-thumb-inset) * 2))
+                * var(--ds-effort-progress, 0)
+              + var(--ds-effort-thumb-inset)
+            ),
+            calc(100% - var(--ds-effort-thumb-w) * 0.5)
+          );
+          border: 0;
+          border-radius: 0.5rem;
+          background-color: transparent;
+          background-image: var(--chibi-sprite, url("/effort-slider-assets/chibi-runner-strip.png"));
+          background-repeat: no-repeat;
+          background-position: 0 0;
+          background-size: 800% 100%;
+          box-shadow: none;
+          filter:
+            drop-shadow(0 1px 1px rgba(0, 0, 0, 0.28))
+            drop-shadow(0 0 5px rgba(92, 105, 255, 0.34));
+          animation: ds-effort-chibi-run 720ms step-end infinite;
+          transform: translateY(-50%);
+          transform-origin: 50% 68%;
+        }
+
+        :host([chibi][data-dragging]) .thumb {
+          animation-duration: 420ms;
+          transform: translateY(-50%) scale(1.07);
+          filter:
+            drop-shadow(0 2px 1px rgba(0, 0, 0, 0.28))
+            drop-shadow(0 0 8px rgba(87, 137, 255, 0.68));
+          transition-property: none;
+        }
+
+        :host([chibi]) .thumb::before,
+        :host([chibi]) .thumb::after {
+          display: none;
+        }
+
+        @keyframes ds-effort-chibi-run {
+          0%   { background-position: 0 0; }
+          12.5%  { background-position: 14.285714% 0; }
+          25%    { background-position: 28.571429% 0; }
+          37.5%  { background-position: 42.857143% 0; }
+          50%    { background-position: 57.142857% 0; }
+          62.5%  { background-position: 71.428571% 0; }
+          75%    { background-position: 85.714286% 0; }
+          87.5%, 100% { background-position: 100% 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :host([chibi]) .thumb {
+            animation: none;
+          }
+        }
+
         :host([disabled]) .range,
         :host([disabled]) button {
           cursor: not-allowed;
@@ -1088,6 +1270,9 @@ class DsEffortSlider extends HTMLElement {
             <span>Smarter</span>
           </div>
 
+          <div class="liang-portrait" hidden>
+            <canvas class="liang-canvas" role="img" aria-label="梁系强度人像"></canvas>
+          </div>
           <div class="track-shell">
             <div class="track" aria-hidden="true">
               <div class="track-fill"></div>
@@ -1112,6 +1297,11 @@ class DsEffortSlider extends HTMLElement {
               aria-valuetext="Default"
             />
           </div>
+
+          <button class="liang-toggle" type="button" role="switch" aria-label="滑动变祖器" aria-checked="false">
+            <span class="liang-dot" aria-hidden="true"></span>
+            <span class="liang-toggle-label">滑动变祖器</span>
+          </button>
         </section>
       </div>
     `;
@@ -1133,6 +1323,11 @@ class DsEffortSlider extends HTMLElement {
     this._bars = this.shadowRoot.querySelectorAll(".trigger-bar");
     this._helpWrap = this.shadowRoot.querySelector(".help-wrap");
     this._helpButton = this.shadowRoot.querySelector(".help-button");
+    this._liangPortrait = this.shadowRoot.querySelector(".liang-portrait");
+    this._liangCanvas = this.shadowRoot.querySelector(".liang-canvas");
+    this._liangToggle = this.shadowRoot.querySelector(".liang-toggle");
+    this._liangToggleLabel = this.shadowRoot.querySelector(".liang-toggle-label");
+    this._liangImages = new Map();
 
     this._onDocumentPointerDown = this._onDocumentPointerDown.bind(this);
     this._onReducedMotionChange = this._onReducedMotionChange.bind(this);
@@ -1153,6 +1348,8 @@ class DsEffortSlider extends HTMLElement {
    this._parseSupported();
     this._syncInlineState();
     this._syncTexts();
+    this._syncLiang();
+    this._syncChibi();
 
     this._input.addEventListener("pointerdown", (event) => this._onPointerDown(event), { signal });
     this._input.addEventListener("pointerup", (event) => this._onPointerUp(event), { signal });
@@ -1163,6 +1360,17 @@ class DsEffortSlider extends HTMLElement {
     this._helpButton.addEventListener("click", () => {
       if (this.disabled) return;
       this._helpWrap.toggleAttribute("data-tip-open");
+    }, { signal });
+    this._liangToggle.addEventListener("click", () => {
+      if (this.disabled) return;
+      this.liang = !this.liang;
+      this.dispatchEvent(
+        new CustomEvent("ds-liang-toggle", {
+          bubbles: true,
+          composed: true,
+          detail: { enabled: this.liang },
+        }),
+      );
     }, { signal });
     this.shadowRoot.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && this.open && !this.hasAttribute("inline")) {
@@ -1238,6 +1446,8 @@ class DsEffortSlider extends HTMLElement {
       this._syncTexts();
     }
     if (name === "supported") this._parseSupported();
+    if (name === "liang" || name === "liang-asset-base" || name === "liang-label") this._syncLiang();
+    if (name === "chibi" || name === "chibi-sprite") this._syncChibi();
   }
 
   get value() {
@@ -1298,6 +1508,29 @@ class DsEffortSlider extends HTMLElement {
           },
     );
     this._syncLevels();
+  }
+
+  /** 滑动变祖器开关：无属性即关闭。 */
+  get liang() {
+    return this.hasAttribute("liang");
+  }
+
+  set liang(next) {
+    this.toggleAttribute("liang", Boolean(next));
+  }
+
+  /** 大肥鱼 thumb 开关：无属性即关闭。 */
+  get chibi() {
+    return this.hasAttribute("chibi");
+  }
+
+  set chibi(next) {
+    this.toggleAttribute("chibi", Boolean(next));
+  }
+
+  /** 当前档位对应的梁段名（如「梁祖」）。 */
+  get liangStage() {
+    return LIANG_STAGES[clamp(this._levelIndex, 0, LIANG_STAGES.length - 1)];
   }
 
   _syncLevels() {
@@ -1423,6 +1656,10 @@ class DsEffortSlider extends HTMLElement {
     if (!this.open) this.setAttribute("open", "");
     this._panel.hidden = false;
     this._resizeCanvas();
+    if (this.liang) {
+      this._resizeLiangCanvas();
+      this._preloadLiangFrame(this._liangFrame);
+    }
   }
 
   close() {
@@ -1486,6 +1723,115 @@ class DsEffortSlider extends HTMLElement {
       "Higher effort spends more time reasoning. Max adds the deepest analysis and code pass.";
     this._input.setAttribute("aria-label", this.getAttribute("input-aria-label") || "Effort level");
     this._helpButton.setAttribute("aria-label", this.getAttribute("help-aria-label") || "About effort levels");
+  }
+
+  // ---------- 滑动变祖器（梁）feature ----------
+
+  // 档位标签：梁开启时显示「Max 梁祖」形式的后缀
+  _labelTextForIndex(index) {
+    const level = this._levels[index];
+    const base = level ? level.label : "";
+    if (this.liang && index >= 0 && index < LIANG_STAGES.length) {
+      return `${base} ${LIANG_STAGES[index]}`;
+    }
+    return base;
+  }
+
+  _applyLevelLabel() {
+    const text = this._labelTextForIndex(this._levelIndex);
+    if (this._currentLabel && this._currentLabel.textContent !== text) {
+      this._currentLabel.textContent = text;
+    }
+    if (this._triggerValue && this._triggerValue.textContent !== text) {
+      this._triggerValue.textContent = text;
+    }
+    if (this._trigger) {
+      this._trigger.setAttribute("aria-label", `Effort level: ${text}`);
+    }
+  }
+
+  _syncLiang() {
+    if (!this._liangPortrait) return;
+    const enabled = this.liang;
+    this._liangAssetBase = this.getAttribute("liang-asset-base") || "/effort-slider-assets/liang-frames/";
+    this._liangLabel = this.getAttribute("liang-label") || "滑动变祖器";
+    this._liangToggleLabel.textContent = this._liangLabel;
+    this._liangPortrait.hidden = !enabled;
+    // 梁开启时标签加段名后缀；关闭时回纯档位名
+    this._applyLevelLabel();
+    // 组件内嵌开关与外部属性同步 aria-checked
+    this._liangToggle.setAttribute("aria-checked", String(enabled));
+    if (enabled) {
+      this._resizeLiangCanvas();
+      this._preloadLiangFrame(this._liangFrame);
+      this._updateLiangAria(this._liangFrame);
+    }
+  }
+
+  _liangFrameForValue(value) {
+    // 六档各占 5 个帧位的连续映射（同 Liang 原版：段内 6 帧含段首）
+    const v = clamp(Number.isFinite(value) ? value : 0, 0, this._levels.length - 1);
+    const span = 30 / Math.max(1, this._levels.length - 1);
+    return clamp(Math.round(v * span), 0, 30);
+  }
+
+  _resizeLiangCanvas() {
+    const rect = this._liangPortrait.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const width = Math.round(rect.width * ratio);
+    const height = Math.round(rect.height * ratio);
+    if (this._liangCanvas.width !== width || this._liangCanvas.height !== height) {
+      this._liangCanvas.width = width;
+      this._liangCanvas.height = height;
+      this._liangCanvas.style.width = `${rect.width}px`;
+      this._liangCanvas.style.height = `${rect.height}px`;
+      this._drawLiangFrame(this._liangFrame);
+    }
+  }
+
+  _liangFrameUrl(frame) {
+    return `${this._liangAssetBase}frame-${String(frame).padStart(2, "0")}.webp`;
+  }
+
+  _drawLiangFrame(frame) {
+    const context = this._liangCanvas.getContext("2d");
+    if (!context || !this._liangCanvas.width) return;
+    const image = this._liangImages.get(frame);
+    if (!image) return;
+    context.clearRect(0, 0, this._liangCanvas.width, this._liangCanvas.height);
+    context.drawImage(image, 0, 0, this._liangCanvas.width, this._liangCanvas.height);
+  }
+
+  _updateLiangAria(frame) {
+    // 与原版一致：每 5 帧一段；30 帧单独归入最后一段
+    const stageIndex = clamp(Math.floor(frame / 5), 0, LIANG_STAGES.length - 1);
+    this._liangCanvas.setAttribute("aria-label", `梁系强度：${LIANG_STAGES[stageIndex]}`);
+  }
+
+  _preloadLiangFrame(frame) {
+    if (this._liangImages.has(frame)) {
+      const cached = this._liangImages.get(frame);
+      if (cached.complete) this._drawLiangFrame(frame);
+      return;
+    }
+    const image = new Image();
+    image.onload = () => this._drawLiangFrame(frame);
+    image.src = this._liangFrameUrl(frame);
+    this._liangImages.set(frame, image);
+  }
+
+  // ---------- 大肥鱼 thumb feature ----------
+
+  _syncChibi() {
+    const enabled = this.chibi;
+    if (this.getAttribute("chibi-sprite")) {
+      this._chibiSprite = this.getAttribute("chibi-sprite");
+    }
+    this.style.setProperty("--chibi-sprite", `url("${this._chibiSprite}")`);
+    this.toggleAttribute("chibi", enabled);
+    // 帧循环（静止 720ms / 拖拽 420ms / reduced-motion 冻结）全部由
+    // CSS keyframes + [data-dragging] 属性驱动，无需 JS 定时器。
   }
 
   _onDocumentPointerDown(event) {
@@ -1619,7 +1965,7 @@ class DsEffortSlider extends HTMLElement {
     const level = this._levels[nextIndex];
     this._value = safeValue;
     this._input.value = String(safeValue);
-    this._input.setAttribute("aria-valuetext", level ? level.label : "");
+    this._input.setAttribute("aria-valuetext", this._labelTextForIndex(nextIndex));
     this.style.setProperty(
       "--ds-effort-progress",
       String(this._valueToDisplay(safeValue)),
@@ -1633,18 +1979,28 @@ class DsEffortSlider extends HTMLElement {
     this.setAttribute("data-level", String(nextIndex));
     this.toggleAttribute("data-glow", nextIndex >= 3);
 
+    // 梁：拖动时逐帧换人像（连续值 → 帧号），松手吸附后停在段首帧
+    if (this.liang) {
+      const frame = this._liangFrameForValue(safeValue);
+      if (frame !== this._liangFrame) {
+        this._liangFrame = frame;
+        this._preloadLiangFrame(frame);
+        this._updateLiangAria(frame);
+      }
+    }
+
     if (nextIndex !== previousIndex) {
       this._levelIndex = nextIndex;
-      this._swapLabel(level ? level.label : "", nextIndex > previousIndex, animateLabel);
-    } else if (this._currentLabel.textContent !== (level ? level.label : "")) {
-      this._currentLabel.textContent = level ? level.label : "";
+      this._swapLabel(this._labelTextForIndex(nextIndex), nextIndex > previousIndex, animateLabel);
+    } else if (this._currentLabel.textContent !== this._labelTextForIndex(nextIndex)) {
+      this._currentLabel.textContent = this._labelTextForIndex(nextIndex);
     }
 
     this._updateTicks(nextIndex);
     this._updateTriggerBars(nextIndex);
 
-    this._triggerValue.textContent = level ? level.label : "";
-    this._trigger.setAttribute("aria-label", `Effort level: ${level ? level.label : ""}`);
+    this._triggerValue.textContent = this._labelTextForIndex(nextIndex);
+    this._trigger.setAttribute("aria-label", `Effort level: ${this._labelTextForIndex(nextIndex)}`);
     const isMax = Boolean(level && level.canonical === "max");
     this._setMax(isMax);
     // High/Extra 时启动"点阵 + 水波纹"场（Max 的弱化前奏）；离开则停止

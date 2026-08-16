@@ -113,12 +113,32 @@
       </div>
       <div class="status" id="status">Max · value 5.000</div>
     </div>
+
+    <div class="card">
+      <h2>滑动变祖器（梁）</h2>
+      <p>点击轨道下方「滑动变祖器」开关开启人像与档位名后缀；人像随 value 连续变化。</p>
+      <ds-effort-slider id="liangPanel" inline></ds-effort-slider>
+      <div class="controls" id="liangControls">
+        <button class="chip" type="button" id="liangToggleBtn">● 滑动变祖器：开</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>大肥鱼 thumb</h2>
+      <p>thumb 替换为 8 帧奔跑精灵图（静止 720ms / 拖拽 420ms / reduced-motion 冻结）。</p>
+      <ds-effort-slider id="chibiPanel" inline></ds-effort-slider>
+      <div class="controls" id="chibiControls">
+        <button class="chip" type="button" id="chibiToggleBtn">🐟 大肥鱼：开</button>
+      </div>
+    </div>
   </div>
 
   <script src="../src/ds-effort-slider.js"></script>
   <script>
     const panelEl = document.getElementById("panel");
     const inlineEl = document.getElementById("inline");
+    const liangEl = document.getElementById("liangPanel");
+    const chibiEl = document.getElementById("chibiPanel");
     const presetsEl = document.getElementById("presets");
     const valueInput = document.getElementById("value");
     const statusEl = document.getElementById("status");
@@ -135,6 +155,8 @@
     function setSupported(list) {
       panelEl.supported = list;
       inlineEl.supported = list;
+      liangEl.supported = list;
+      chibiEl.supported = list;
     }
 
     for (const [name, list] of Object.entries(presets)) {
@@ -163,6 +185,30 @@
       const v = Number(valueInput.value);
       panelEl.value = v;
       inlineEl.value = v;
+      liangEl.value = v;
+      chibiEl.value = v;
+    });
+
+    // 梁开关：demo 里人像帧从仓库 assets/ 读取（demo 页位于 demo/ 子目录）
+    liangEl.setAttribute("liang-asset-base", "../assets/liang-frames/");
+    liangEl.setAttribute("liang", "");
+    liangEl.addEventListener("ds-liang-toggle", () => {
+      document.getElementById("liangToggleBtn").textContent =
+        `● 滑动变祖器：${liangEl.liang ? "开" : "关"}`;
+    });
+    document.getElementById("liangToggleBtn").addEventListener("click", () => {
+      liangEl.liang = !liangEl.liang;
+      document.getElementById("liangToggleBtn").textContent =
+        `● 滑动变祖器：${liangEl.liang ? "开" : "关"}`;
+    });
+
+    // 大肥鱼 thumb 开关
+    chibiEl.setAttribute("chibi-sprite", "../assets/chibi-runner-strip.png");
+    chibiEl.setAttribute("chibi", "");
+    document.getElementById("chibiToggleBtn").addEventListener("click", () => {
+      chibiEl.chibi = !chibiEl.chibi;
+      document.getElementById("chibiToggleBtn").textContent =
+        `🐟 大肥鱼：${chibiEl.chibi ? "开" : "关"}`;
     });
 
     themeBtn.addEventListener("click", () => {

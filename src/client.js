@@ -75,14 +75,58 @@ function effortIdForCanonical(reasoning, canonical) {
   return eff ? eff.id : void 0;
 }
 
+// --- feature preference stores (localStorage-backed) -------------------------
+// 滑动变祖器（梁）与大肥鱼 thumb 的开关状态。组件内嵌的 liang 开关走
+// liangStore，设置页的 chibi 开关走 chibiStore；两处均持久化到当前浏览器。
+function readPref(key, fallback) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw === null ? fallback : raw === "true";
+  } catch {
+    return fallback;
+  }
+}
+
+function makePrefStore(key, fallback) {
+  let current = readPref(key, fallback);
+  const listeners = new Set();
+  const store = {
+    getSnapshot: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    set: (next, persist = true) => {
+      if (current === next) return;
+      current = next;
+      if (persist) {
+        try {
+          window.localStorage.setItem(key, String(next));
+        } catch {
+          // 当前页面仍然跟随选择；仅持久化失败
+        }
+      }
+      listeners.forEach((listener) => listener());
+    },
+  };
+  return store;
+}
+
+const LIANG_STORAGE_KEY = "dsh-client-ui-effort-slider.liang";
+const CHIBI_STORAGE_KEY = "dsh-client-ui-effort-slider.chibi";
+const liangStore = makePrefStore(LIANG_STORAGE_KEY, false);
+const chibiStore = makePrefStore(CHIBI_STORAGE_KEY, false);
+
 // --- React wrapper around <ds-effort-slider> -------------------------------
 // React renders the custom element; all non-string interactions happen through
 // a ref + effect so we never fight React's attribute serialization.
 function EffortSlider(props) {
-  const { supported, value, disabled, onChange, labels } = props;
+  const { supported, value, disabled, onChange, labels, liang, chibi, onLiangChange } = props;
   const ref = React.useRef(null);
   const onChangeRef = React.useRef(onChange);
   onChangeRef.current = onChange;
+  const onLiangChangeRef = React.useRef(onLiangChange);
+  onLiangChangeRef.current = onLiangChange;
 
   React.useEffect(() => {
     const el = ref.current;
@@ -95,6 +139,29 @@ function EffortSlider(props) {
     if (!el) return;
     el.value = value;
   }, [value]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.liang = Boolean(liang);
+  }, [liang]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.chibi = Boolean(chibi);
+  }, [chibi]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // 组件内嵌的梁开关被点击后向上同步状态
+    const onLiangToggle = () => {
+      onLiangChangeRef.current?.(el.liang);
+    };
+    el.addEventListener("ds-liang-toggle", onLiangToggle);
+    return () => el.removeEventListener("ds-liang-toggle", onLiangToggle);
+  }, []);
 
   React.useEffect(() => {
     const el = ref.current;
@@ -119,6 +186,7 @@ function EffortSlider(props) {
     tooltip: labels && labels.tooltip,
     "input-aria-label": labels && labels.inputAria,
     "help-aria-label": labels && labels.helpAria,
+    "liang-label": labels && labels.liangToggle,
   });
 }
 
@@ -149,6 +217,17 @@ function EffortModelSelect(props) {
   const rootRef = React.useRef(null);
   const triggerRef = React.useRef(null);
   const itemRefs = React.useRef([]);
+  const [liang, setLiang] = React.useState(() => liangStore.getSnapshot());
+  const [chibi, setChibi] = React.useState(() => chibiStore.getSnapshot());
+
+  React.useEffect(() => {
+    const unsubLiang = liangStore.subscribe(() => setLiang(liangStore.getSnapshot()));
+    const unsubChibi = chibiStore.subscribe(() => setChibi(chibiStore.getSnapshot()));
+    return () => {
+      unsubLiang();
+      unsubChibi();
+    };
+  }, []);
 
   const choices = React.useMemo(() => {
     if (!state || !Array.isArray(state.groups)) return [];
@@ -203,6 +282,18 @@ function EffortModelSelect(props) {
   const effortLabel = defaultChosen
     ? t("effort.providerDefault")
     : (appliedLevel ? appliedLevel.label : void 0);
+
+  // 梁开启时：档位名后加段名（如「Max 梁祖」）。段名与组件内 LIANG_STAGES
+  // 同源（构建时同作用域拼接）。
+  const liangSuffix = liang && appliedLevel && appliedLevel.canonical && appliedLevel.canonical !== "default"
+    ? (() => {
+        const idx = LEVELS.findIndex((level) => level.canonical === appliedLevel.canonical);
+        return idx >= 0 && idx < LIANG_STAGES.length ? LIANG_STAGES[idx] : void 0;
+      })()
+    : void 0;
+  const displayEffortLabel = effortLabel === void 0 || liangSuffix === void 0
+    ? effortLabel
+    : `${effortLabel} ${liangSuffix}`;
 
   // Adapter-specific strengths that do not map to a slider level.
   const extraEfforts = React.useMemo(() => {
@@ -372,12 +463,12 @@ function EffortModelSelect(props) {
   };
 
   const modelLabel = currentChoice ? currentChoice.model.name : t("trigger.fallback");
-  const triggerLabel = effortLabel === void 0 ? modelLabel : `${modelLabel} · ${effortLabel}`;
+  const triggerLabel = displayEffortLabel === void 0 ? modelLabel : `${modelLabel} · ${displayEffortLabel}`;
   const triggerAria = currentChoice === void 0
     ? t("trigger.selectAria")
     : effortLabel === void 0
       ? t("trigger.aria", { model: modelLabel })
-      : t("trigger.ariaEffort", { model: modelLabel, effort: effortLabel });
+      : t("trigger.ariaEffort", { model: modelLabel, effort: displayEffortLabel });
 
   itemRefs.current = [];
   let itemIndex = 0;
@@ -441,7 +532,7 @@ function EffortModelSelect(props) {
         },
       },
       React.createElement("span", { className: "ds-effort-triggerLabel" }, modelLabel),
-      effortLabel !== void 0 && React.createElement("span", { className: "ds-effort-triggerEffort" }, effortLabel),
+      displayEffortLabel !== void 0 && React.createElement("span", { className: "ds-effort-triggerEffort" }, displayEffortLabel),
       React.createElement(
         "svg",
         { className: "ds-effort-chevron" + (open ? " ds-effort-chevronOpen" : ""), viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true" },
@@ -465,7 +556,7 @@ function EffortModelSelect(props) {
           "button",
           { ref: itemRef(), type: "button", role: "menuitem", className: "ds-effort-cell", onClick: () => setPane("effort") },
           React.createElement("span", { className: "ds-effort-cellLabel" }, t("menu.effort")),
-          React.createElement("span", { className: "ds-effort-cellValue" }, effortLabel),
+          React.createElement("span", { className: "ds-effort-cellValue" }, displayEffortLabel),
           React.createElement("svg", { className: "ds-effort-cellChevron", viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true" },
             React.createElement("path", { d: "M6 4l4 4-4 4", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" })),
         ),
@@ -538,6 +629,9 @@ function EffortModelSelect(props) {
             value: sliderIndex,
             disabled: busy,
             onChange: chooseEffort,
+            liang,
+            chibi,
+            onLiangChange: (next) => liangStore.set(next),
             labels: {
               label: t("effort.title"),
               axisLow: t("effort.axisLow"),
@@ -545,6 +639,7 @@ function EffortModelSelect(props) {
               tooltip: t("effort.tooltip"),
               inputAria: t("effort.ariaLabel"),
               helpAria: t("effort.helpAria"),
+              liangToggle: t("liang.toggle"),
             },
           }),
           React.createElement(
@@ -594,6 +689,42 @@ function EffortModelSelect(props) {
   );
 }
 
+// --- Settings page switches --------------------------------------------------
+// 大肥鱼 thumb 开关：注入 DSH「设置-通用设置」的 settings.general.item 插槽。
+function ChibiThumbSetting({ t }) {
+  // useSyncExternalStore：开关状态实时跟随 store，任何一处变更立即重渲染
+  const enabled = React.useSyncExternalStore(chibiStore.subscribe, chibiStore.getSnapshot);
+  // 插槽未注入 t 时回退到内嵌词典（zh/en 由页面 lang 决定）
+  const txt = (key) => {
+    if (t) return t(key);
+    const lang = typeof document !== "undefined" ? document.documentElement.lang : "";
+    const dict = lang && lang.startsWith("en") ? DICT_EN : DICT_ZH;
+    return dict[key] || key;
+  };
+
+  return React.createElement(
+    "div",
+    { className: "ds-effort-setting-row" },
+    React.createElement(
+      "div",
+      { className: "ds-effort-setting-copy" },
+      React.createElement("div", { className: "ds-effort-setting-title" }, txt("chibi.setting.title")),
+      React.createElement("div", { className: "ds-effort-setting-description" }, txt("chibi.setting.description")),
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        role: "switch",
+        "aria-checked": enabled,
+        className: "ds-effort-setting-switch" + (enabled ? " is-on" : ""),
+        onClick: () => chibiStore.set(!enabled),
+      },
+      React.createElement("span", { className: "ds-effort-setting-knob" }),
+    ),
+  );
+}
+
 // --- locale dictionaries -----------------------------------------------------
 const NS = "dsEffort";
 
@@ -612,6 +743,9 @@ const DICT_ZH = {
   "effort.tooltip": "推理等级越高，思考时间越长。Max 会进行最深度的分析和代码检查。",
   "effort.ariaLabel": "推理等级",
   "effort.helpAria": "关于推理等级",
+  "liang.toggle": "滑动变祖器",
+  "chibi.setting.title": "大肥鱼滑块",
+  "chibi.setting.description": "用大肥鱼替换滑块按钮",
   "downgrade.toast": "已降级到 {level}",
   "downgrade.default": "当前档位不可用，已回退到 Default",
   "status.loading": "正在刷新模型列表…",
@@ -640,6 +774,9 @@ const DICT_EN = {
   "effort.tooltip": "Higher effort spends more time reasoning. Max adds the deepest analysis and code pass.",
   "effort.ariaLabel": "Effort level",
   "effort.helpAria": "About effort levels",
+  "liang.toggle": "Liang Calibrator",
+  "chibi.setting.title": "Big Fat Fish slider",
+  "chibi.setting.description": "Replace the slider thumb with the big fat fish",
   "downgrade.toast": "Downgraded to {level}",
   "downgrade.default": "This level is unavailable; fell back to Default",
   "status.loading": "Refreshing model list…",
@@ -704,12 +841,22 @@ const CSS = `
 /* purple accent + dark variants for the Web Component */
 ds-effort-slider{--ds-effort-accent:#8c73c9;--ds-effort-accent-deep:#a17ec2;--ds-effort-text:var(--dsw-alias-label-secondary,#5f5b58);--ds-effort-text-strong:var(--dsw-alias-label-primary,#3f3b38);--ds-effort-muted:var(--dsw-alias-label-tertiary,#77736f);--ds-effort-track:var(--dsw-alias-bg-layer-2,#edeae8);--ds-effort-track-fill:var(--dsw-alias-bg-layer-3,#e0dbd6);--ds-effort-surface:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1,#fff));--ds-effort-outline:var(--dsw-alias-border-l1,rgba(76,70,65,.12))}
 body[data-ds-dark-theme] ds-effort-slider{--ds-effort-accent:#a17ec2;--ds-effort-accent-deep:#b39ad6;--ds-effort-track:rgba(255,255,255,.08);--ds-effort-track-fill:rgba(255,255,255,.12);--ds-effort-surface:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-1));--light-color:#b9c8ff}
+/* settings-page chibi switch */
+.ds-effort-setting-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(121,126,145,.18))}
+.ds-effort-setting-copy{min-width:0}
+.ds-effort-setting-title{color:var(--dsw-alias-label-primary,#15171b);font-size:14px;font-weight:400;line-height:22px}
+.ds-effort-setting-description{margin-top:3px;color:var(--dsw-alias-label-tertiary,#9296a0);font-size:12px;line-height:18px}
+.ds-effort-setting-switch{position:relative;width:38px;height:22px;padding:0;border:0;border-radius:999px;background:var(--dsw-alias-fill-quaternary,#c7cbd3);cursor:pointer;transition:background 150ms ease;flex:none}
+.ds-effort-setting-switch:hover{filter:brightness(.97)}
+.ds-effort-setting-switch:focus-visible{outline:2px solid var(--dsw-static-blue-400,#5d83ff);outline-offset:2px}
+.ds-effort-setting-switch.is-on{background:var(--dsw-alias-state-business-primary,#4f73ff)}
+.ds-effort-setting-knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform 170ms cubic-bezier(.22,1,.36,1)}
+.ds-effort-setting-switch.is-on .ds-effort-setting-knob{transform:translateX(16px)}
 `;
 
 // --- plugin -------------------------------------------------------------------
 return {
-  inject: ["slots", "sessions", "modelDirectories", "timer", "locale"],
-  apply(ctx) {
+  inject: ["slots", "sessions", "modelDirectories", "timer", "locale"],  apply(ctx) {
     const slots = ctx.slots;
     const sessions = ctx.sessions;
     const models = ctx.modelDirectories;
@@ -737,6 +884,16 @@ return {
     const locale = ctx.locale || ctx.get("locale");
     if (locale) {
       ctx.effect(() => locale.register(NS, { zh: DICT_ZH, en: DICT_EN }), "ds-effort-slider: dictionaries");
+    }
+
+    // 大肥鱼 thumb 开关 → DSH「设置-通用设置」插槽
+    if (slots && typeof slots.inject === "function") {
+      slots.inject("settings.general.item", () =>
+        slots.register(
+          { name: "settings.general.item", id: "effort-slider-chibi-thumb", order: 20 },
+          ChibiThumbSetting,
+        ),
+      );
     }
 
     slots.inject("conversation.input.model", () => slots.register({

@@ -1,6 +1,6 @@
 {
   "name": "dsh-client-ui-effort-slider",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Animated reasoning-level slider for DeepSeek Harness model selection.",
   "type": "module",
   "main": "index.js",
@@ -10,7 +10,7 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["index.js", "cordis.patch.yml", "lib/client.js", "README.md"],
+  "files": ["index.js", "cordis.patch.yml", "lib/client.js", "assets/liang-frames/*.webp", "assets/chibi-runner-strip.png", "README.md"],
   "scripts": { "build": "node scripts/build-client.mjs", "prepare": "node scripts/build-client.mjs" },
   "publishConfig": { "access": "public" },
   "dsh": {
