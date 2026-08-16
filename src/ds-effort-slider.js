@@ -580,12 +580,12 @@ class DsEffortSlider extends HTMLElement {
 
         :host([data-max]) .track::before {
           opacity: 1;
-          animation: ds-effort-track-unfold 900ms cubic-bezier(0.35, 0, 0.25, 1) forwards;
+          animation: ds-effort-track-unfold 500ms cubic-bezier(0.35, 0, 0.25, 1) forwards;
         }
 
         @keyframes ds-effort-track-unfold {
           from {
-            clip-path: inset(0 100% 0 0);
+            clip-path: inset(0 0 0 100%);
           }
           to {
             clip-path: inset(0 0 0 0);
