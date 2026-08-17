@@ -7,13 +7,27 @@
 // The demo/ page loads that component source directly.
 // =============================================================================
 
-// Canonical level tokens, ordered left to right. "default" is the special
-// leftmost slot that submits without reasoningEffort; "off" is a real level.
+// Canonical level tokens, ordered left to right. "default" is a special
+// provider-default state that submits without reasoningEffort when possible;
+// "off" is a real first level.
 const CANONICAL_ORDER = ["off", "low", "medium", "high", "extra", "max"];
-const DEFAULT_ALIASES = new Set([
-  "default", "off", "none", "disabled", "no", "auto",
+
+// Explicit alias sets. These are checked BEFORE generic substring matching so
+// compound names like "Extra High" / "X-High" are not swallowed by "high".
+const DEFAULT_ALIASES = new Set(["default", "auto", "automatic"]);
+const OFF_ALIASES = new Set([
+  "off", "none", "disabled", "no",
   "no reasoning", "no-reasoning", "no_reasoning",
   "no effort", "no_effort",
+]);
+const LOW_ALIASES = new Set(["low", "lite", "light", "minimal"]);
+const MEDIUM_ALIASES = new Set(["medium", "med", "mid", "balanced", "normal", "standard"]);
+const HIGH_ALIASES = new Set(["high", "strong", "hard"]);
+const EXTRA_ALIASES = new Set([
+  "extra", "extreme",
+  "xhigh", "x-high", "x high",
+  "extra high", "extra-high", "extra_high",
+  "extreme high", "very high", "ultra high", "super high", "high+",
 ]);
 const MAX_ALIASES = new Set(["max", "maximum", "ultracode"]);
 
@@ -26,19 +40,22 @@ function normalizeName(name) {
 }
 
 // Map a provider effort display name to a canonical token. "default" means
-// the special Default slot; "off" is a real first level; unknown names
-// return undefined so they can be appended as adapter-specific extras.
+// the provider-default state; unknown names return undefined so they can be
+// appended as adapter-specific extras.
 function canonicalToken(name) {
   const n = normalizeName(name);
-  if (!n) return "default";
-  if (DEFAULT_ALIASES.has(n)) return n === "default" ? "default" : "off";
+  if (!n) return void 0;
+  if (DEFAULT_ALIASES.has(n)) return "default";
+  if (OFF_ALIASES.has(n)) return "off";
+  if (LOW_ALIASES.has(n)) return "low";
+  if (MEDIUM_ALIASES.has(n)) return "medium";
+  if (HIGH_ALIASES.has(n)) return "high";
+  if (EXTRA_ALIASES.has(n)) return "extra";
   if (MAX_ALIASES.has(n)) return "max";
   for (const token of CANONICAL_ORDER) {
     if (n === token) return token;
     if (n.includes(` ${token}`) || n.includes(`${token} `)) return token;
   }
-  if (n === "med" || n === "mid") return "medium";
-  if (n === "extreme") return "extra";
   return void 0;
 }
 
@@ -69,10 +86,25 @@ function nearestSupportedBelow(supported, from) {
   return -1;
 }
 
-function effortIdForCanonical(reasoning, canonical) {
+// Prefer the effort whose normalized name exactly matches the canonical token,
+// so "Extra" beats "X-High" when both map to extra. Falls back to the first
+// candidate when no exact match exists.
+function preferredEffortId(reasoning, canonical) {
   if (!reasoning || !Array.isArray(reasoning.efforts)) return void 0;
-  const eff = reasoning.efforts.find((e) => canonicalToken(e.name) === canonical);
-  return eff ? eff.id : void 0;
+  const candidates = reasoning.efforts.filter((e) => canonicalToken(e.name) === canonical);
+  if (candidates.length === 0) return void 0;
+  const exact = candidates.find((e) => normalizeName(e.name) === canonical);
+  if (exact) return exact.id;
+  const level = LEVELS.find((l) => l.canonical === canonical);
+  if (level) {
+    const labelExact = candidates.find((e) => normalizeName(e.name) === normalizeName(level.label));
+    if (labelExact) return labelExact.id;
+  }
+  return candidates[0].id;
+}
+
+function effortIdForCanonical(reasoning, canonical) {
+  return preferredEffortId(reasoning, canonical);
 }
 
 // --- feature preference stores (localStorage-backed) -------------------------
@@ -121,7 +153,10 @@ const chibiStore = makePrefStore(CHIBI_STORAGE_KEY, false);
 // React renders the custom element; all non-string interactions happen through
 // a ref + effect so we never fight React's attribute serialization.
 function EffortSlider(props) {
-  const { supported, value, disabled, onChange, labels, liang, chibi, onLiangChange } = props;
+  const {
+    supported, value, disabled, defaultActive,
+    onChange, labels, liang, chibi, onLiangChange,
+  } = props;
   const ref = React.useRef(null);
   const onChangeRef = React.useRef(onChange);
   onChangeRef.current = onChange;
@@ -139,6 +174,12 @@ function EffortSlider(props) {
     if (!el) return;
     el.value = value;
   }, [value]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.defaultActive = Boolean(defaultActive);
+  }, [defaultActive]);
 
   React.useEffect(() => {
     const el = ref.current;
@@ -179,6 +220,7 @@ function EffortSlider(props) {
   return React.createElement("ds-effort-slider", {
     ref,
     disabled: disabled ? true : void 0,
+    "default-active": defaultActive ? true : void 0,
     inline: true,
     label: labels && labels.label,
     "axis-low": labels && labels.axisLow,
@@ -253,18 +295,34 @@ function EffortModelSelect(props) {
   const reasoning = currentChoice ? currentChoice.model.reasoning : void 0;
 
   const effectiveEffort = current ? (current.reasoningEffort ?? (reasoning ? reasoning.defaultEffort : void 0)) : void 0;
+  const hasExplicitEffort = Boolean(current && current.reasoningEffort !== void 0);
 
   const supported = React.useMemo(() => computeSupported(reasoning), [reasoning]);
 
-  // The level that is actually applied (may differ from the user's chosen
-  // slider position when the chosen level is not supported by the model).
+  // The level that is actually applied. When the user has not set an explicit
+  // reasoningEffort, we show the provider-default state as "Default" rather
+  // than pretending the provider's default effort is an explicit slider pick.
+  // Models without reasoning metadata still get this Default surface: DSH only
+  // omits `reasoning` when the adapter cannot offer selectable efforts, so the
+  // only honest control is "use the provider default / no explicit effort".
   const appliedLevel = React.useMemo(() => {
-    if (reasoning === void 0) return void 0;
-    const effId = effectiveEffort;
-    if (effId === void 0) return { label: t("effort.providerDefault"), canonical: "default" };
+    if (!currentChoice) return void 0;
+    if (reasoning === void 0) {
+      if (!hasExplicitEffort || defaultChosen) {
+        return { label: t("effort.providerDefault"), canonical: "default" };
+      }
+      const effId = current && current.reasoningEffort;
+      return { label: effId || t("effort.providerDefault"), canonical: void 0 };
+    }
+    if (!hasExplicitEffort || defaultChosen) {
+      return { label: t("effort.providerDefault"), canonical: "default" };
+    }
+    const effId = current && current.reasoningEffort;
     const name = effortNameForId(reasoning, effId);
     return { label: name || effId, canonical: canonicalToken(name) };
-  }, [reasoning, effectiveEffort, t]);
+  }, [reasoning, current, currentChoice, defaultChosen, hasExplicitEffort, t]);
+
+  const isDefaultActive = !hasExplicitEffort || defaultChosen;
 
   // Where the thumb should rest when the user has not clicked a slider slot.
   const derivedIndex = React.useMemo(() => {
@@ -277,11 +335,17 @@ function EffortModelSelect(props) {
   }, [appliedLevel]);
 
   const sliderIndex = chosenIndex !== null ? chosenIndex : derivedIndex;
-  const activeBars = Math.round(sliderIndex);
+  const appliedIndex = React.useMemo(() => {
+    if (appliedLevel && appliedLevel.canonical && appliedLevel.canonical !== "default") {
+      const idx = LEVELS.findIndex((level) => level.canonical === appliedLevel.canonical);
+      return idx >= 0 ? idx : 0;
+    }
+    return 0;
+  }, [appliedLevel]);
+  // 信号条反映“实际生效档位”，而不是用户点击后停留的 thumb 位置。
+  const activeBars = Math.round(appliedIndex);
 
-  const effortLabel = defaultChosen
-    ? t("effort.providerDefault")
-    : (appliedLevel ? appliedLevel.label : void 0);
+  const effortLabel = appliedLevel ? appliedLevel.label : void 0;
 
   // 梁开启时：档位名后加段名（如「Max 梁祖」）。段名与组件内 LIANG_STAGES
   // 同源（构建时同作用域拼接）。
@@ -295,10 +359,16 @@ function EffortModelSelect(props) {
     ? effortLabel
     : `${effortLabel} ${liangSuffix}`;
 
-  // Adapter-specific strengths that do not map to a slider level.
+  // Adapter-specific strengths that do not map to a slider level. Default-like
+  // provider efforts ("Default" / "Auto") are also exposed as pills so the
+  // provider's real default id can be selected explicitly.
   const extraEfforts = React.useMemo(() => {
     if (!reasoning || !Array.isArray(reasoning.efforts)) return [];
-    return reasoning.efforts.filter((eff) => canonicalToken(eff.name) === void 0);
+    return reasoning.efforts.filter((eff) => {
+      const token = canonicalToken(eff.name);
+      if (token === void 0 || token === "default") return true;
+      return eff.id !== preferredEffortId(reasoning, token);
+    });
   }, [reasoning]);
 
   const busy = state ? state.status === "selecting" : false;
@@ -375,6 +445,7 @@ function EffortModelSelect(props) {
       close(true);
       return;
     }
+    const preserveDefault = defaultChosen || !hasExplicitEffort;
     setChosenIndex(null);
     setDefaultChosen(false);
     lastActionRef.current = "select";
@@ -382,25 +453,31 @@ function EffortModelSelect(props) {
       c.selection.provider === selection.provider && c.selection.model === selection.model,
     );
     const targetReasoning = targetChoice ? targetChoice.model.reasoning : void 0;
-    let finalSelection = selection;
-    const targetSupported = computeSupported(targetReasoning);
-    const currentCanonical = appliedLevel ? appliedLevel.canonical : "default";
-    if (currentCanonical && currentCanonical !== "default") {
-      const currentIdx = LEVELS.findIndex((level) => level.canonical === currentCanonical);
-      if (currentIdx >= 0 && !targetSupported[currentIdx]) {
-        const down = nearestSupportedBelow(targetSupported, currentIdx);
-        if (down >= 0) {
-          const effId = effortIdForCanonical(targetReasoning, LEVELS[down].canonical);
+    let finalSelection;
+    if (preserveDefault) {
+      // 保留 Default：不带 reasoningEffort，让新模型使用自己的默认。
+      finalSelection = { provider: selection.provider, model: selection.model };
+    } else {
+      finalSelection = selection;
+      const targetSupported = computeSupported(targetReasoning);
+      const currentCanonical = appliedLevel ? appliedLevel.canonical : void 0;
+      if (currentCanonical && currentCanonical !== "default") {
+        const currentIdx = LEVELS.findIndex((level) => level.canonical === currentCanonical);
+        if (currentIdx >= 0 && !targetSupported[currentIdx]) {
+          const down = nearestSupportedBelow(targetSupported, currentIdx);
+          if (down >= 0) {
+            const effId = effortIdForCanonical(targetReasoning, LEVELS[down].canonical);
+            if (effId !== void 0) finalSelection = { ...selection, reasoningEffort: effId };
+            toastSeq.current += 1;
+            setToast({ seq: toastSeq.current, text: t("downgrade.toast", { level: LEVELS[down].label }) });
+          } else {
+            toastSeq.current += 1;
+            setToast({ seq: toastSeq.current, text: t("downgrade.default") });
+          }
+        } else if (currentIdx >= 0 && targetSupported[currentIdx]) {
+          const effId = effortIdForCanonical(targetReasoning, LEVELS[currentIdx].canonical);
           if (effId !== void 0) finalSelection = { ...selection, reasoningEffort: effId };
-          toastSeq.current += 1;
-          setToast({ seq: toastSeq.current, text: t("downgrade.toast", { level: LEVELS[down].label }) });
-        } else {
-          toastSeq.current += 1;
-          setToast({ seq: toastSeq.current, text: t("downgrade.default") });
         }
-      } else if (currentIdx >= 0 && targetSupported[currentIdx]) {
-        const effId = effortIdForCanonical(targetReasoning, LEVELS[currentIdx].canonical);
-        if (effId !== void 0) finalSelection = { ...selection, reasoningEffort: effId };
       }
     }
     select(finalSelection).then(settleSelection);
@@ -418,7 +495,7 @@ function EffortModelSelect(props) {
     if (supported[index]) {
       const effId = effortIdForCanonical(reasoning, level.canonical);
       if (effId === void 0) return;
-      if (effectiveEffort === effId) return;
+      if (current.reasoningEffort === effId) return;
       lastActionRef.current = "select";
       select({ ...base, reasoningEffort: effId }).then(settleEffortSelection);
       return;
@@ -427,7 +504,7 @@ function EffortModelSelect(props) {
     if (down >= 0) {
       const effId = effortIdForCanonical(reasoning, LEVELS[down].canonical);
       if (effId !== void 0) {
-        if (effectiveEffort !== effId) {
+        if (current.reasoningEffort !== effId) {
           lastActionRef.current = "select";
           select({ ...base, reasoningEffort: effId }).then(settleEffortSelection);
         }
@@ -436,7 +513,7 @@ function EffortModelSelect(props) {
         return;
       }
     }
-    if (effectiveEffort !== void 0) {
+    if (current.reasoningEffort !== void 0) {
       lastActionRef.current = "select";
       select(base).then(settleEffortSelection);
     }
@@ -455,8 +532,9 @@ function EffortModelSelect(props) {
 
   const chooseExtraEffort = (eff) => {
     if (current == null) return;
-    if (effectiveEffort === eff.id) return;
+    setChosenIndex(null);
     setDefaultChosen(false);
+    if (current.reasoningEffort === eff.id) return;
     lastActionRef.current = "select";
     select({ provider: current.provider, model: current.model, reasoningEffort: eff.id })
       .then(settleEffortSelection);
@@ -483,7 +561,7 @@ function EffortModelSelect(props) {
     const items = itemRefs.current.filter((item) => item !== null);
     if (items.length === 0) return;
     const active = items.findIndex((item) => item === document.activeElement);
-    items[(Math.max(active, 0) + offset + items.length) % items.length]?.focus();
+    items[(active + offset + items.length) % items.length]?.focus();
   };
 
   const onRootKeyDown = (event) => {
@@ -495,6 +573,8 @@ function EffortModelSelect(props) {
     }
     if (!open) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      // 滑块 input 自己处理方向键，不要让菜单导航抢走事件。
+      if (event.target instanceof HTMLInputElement && event.target.type === "range") return;
       event.preventDefault();
       moveFocus(event.key === "ArrowDown" ? 1 : -1);
     }
@@ -552,7 +632,7 @@ function EffortModelSelect(props) {
           React.createElement("svg", { className: "ds-effort-cellChevron", viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true" },
             React.createElement("path", { d: "M6 4l4 4-4 4", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round" })),
         ),
-        reasoning !== void 0 && React.createElement(
+        currentChoice !== void 0 && React.createElement(
           "button",
           { ref: itemRef(), type: "button", role: "menuitem", className: "ds-effort-cell", onClick: () => setPane("effort") },
           React.createElement("span", { className: "ds-effort-cellLabel" }, t("menu.effort")),
@@ -622,62 +702,84 @@ function EffortModelSelect(props) {
           React.createElement("span", null, t("error.action", { message: state.error })),
           React.createElement("button", { type: "button", className: "ds-effort-retry", onClick: reload }, t("action.reload")),
         ),
-        [
-          React.createElement(EffortSlider, {
-            key: "slider",
-            supported,
-            value: sliderIndex,
-            disabled: busy,
-            onChange: chooseEffort,
-            liang,
-            chibi,
-            onLiangChange: (next) => liangStore.set(next),
-            labels: {
-              label: t("effort.title"),
-              axisLow: t("effort.axisLow"),
-              axisHigh: t("effort.axisHigh"),
-              tooltip: t("effort.tooltip"),
-              inputAria: t("effort.ariaLabel"),
-              helpAria: t("effort.helpAria"),
-              liangToggle: t("liang.toggle"),
-            },
-          }),
-          React.createElement(
-            "div",
-            { key: "extras", className: "ds-effort-extras" },
-            React.createElement(
-              "button",
-              {
-                type: "button",
-                role: "menuitemradio",
-                "aria-checked": Boolean(defaultChosen || (appliedLevel && appliedLevel.canonical === "default")),
-                className: "ds-effort-extraItem" + (defaultChosen || (appliedLevel && appliedLevel.canonical === "default")
-                  ? " ds-effort-extraItemActive"
-                  : ""),
+        reasoning === void 0
+          ? [
+              React.createElement("div", { key: "empty", className: "ds-effort-empty" }, t("empty.efforts")),
+              React.createElement(
+                "div",
+                { key: "extras", className: "ds-effort-extras" },
+                React.createElement(
+                  "button",
+                  {
+                    ref: itemRef(),
+                    type: "button",
+                    role: "menuitemradio",
+                    "aria-checked": isDefaultActive,
+                    className: "ds-effort-extraItem" + (isDefaultActive ? " ds-effort-extraItemActive" : ""),
+                    disabled: busy,
+                    onClick: chooseDefault,
+                  },
+                  React.createElement("span", null, t("effort.providerDefault")),
+                ),
+              ),
+            ]
+          : [
+              React.createElement(EffortSlider, {
+                key: "slider",
+                supported,
+                value: sliderIndex,
+                defaultActive: isDefaultActive,
                 disabled: busy,
-                onClick: chooseDefault,
-              },
-              React.createElement("span", null, t("effort.providerDefault")),
-            ),
-            extraEfforts.map((eff) => {
-              const active = effectiveEffort === eff.id;
-              return React.createElement(
-                "button",
-                {
-                  type: "button",
-                  role: "menuitemradio",
-                  "aria-checked": active,
-                  className: "ds-effort-extraItem" + (active ? " ds-effort-extraItemActive" : ""),
-                  disabled: busy,
-                  key: eff.id,
-                  onClick: () => chooseExtraEffort(eff),
+                onChange: chooseEffort,
+                liang,
+                chibi,
+                onLiangChange: (next) => liangStore.set(next),
+                labels: {
+                  label: t("effort.title"),
+                  axisLow: t("effort.axisLow"),
+                  axisHigh: t("effort.axisHigh"),
+                  tooltip: t("effort.tooltip"),
+                  inputAria: t("effort.ariaLabel"),
+                  helpAria: t("effort.helpAria"),
+                  liangToggle: t("liang.toggle"),
                 },
-                React.createElement("span", null, eff.name),
-                active && React.createElement("span", { className: "ds-effort-check" }, "✓"),
-              );
-            }),
-          ),
-        ],
+              }),
+              React.createElement(
+                "div",
+                { key: "extras", className: "ds-effort-extras" },
+                React.createElement(
+                  "button",
+                  {
+                    ref: itemRef(),
+                    type: "button",
+                    role: "menuitemradio",
+                    "aria-checked": isDefaultActive,
+                    className: "ds-effort-extraItem" + (isDefaultActive ? " ds-effort-extraItemActive" : ""),
+                    disabled: busy,
+                    onClick: chooseDefault,
+                  },
+                  React.createElement("span", null, t("effort.providerDefault")),
+                ),
+                extraEfforts.map((eff) => {
+                  const active = effectiveEffort === eff.id;
+                  return React.createElement(
+                    "button",
+                    {
+                      ref: itemRef(),
+                      type: "button",
+                      role: "menuitemradio",
+                      "aria-checked": active,
+                      className: "ds-effort-extraItem" + (active ? " ds-effort-extraItemActive" : ""),
+                      disabled: busy,
+                      key: eff.id,
+                      onClick: () => chooseExtraEffort(eff),
+                    },
+                    React.createElement("span", null, eff.name),
+                    active && React.createElement("span", { className: "ds-effort-check" }, "✓"),
+                  );
+                }),
+              ),
+            ],
       ],
     ),
     toast !== null && React.createElement(
@@ -832,7 +934,7 @@ const CSS = `
 .ds-effort-extras{margin-top:12px;border-top:1px solid var(--dsw-alias-border-l1);padding-top:8px;display:flex;flex-wrap:wrap;gap:6px}
 .ds-effort-extras .ds-effort-extraItem{width:auto;border:1px solid var(--dsw-alias-border-l1);padding:4px 10px;border-radius:999px;justify-content:flex-start}
 .ds-effort-extras .ds-effort-extraItemActive{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-selected,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-label-primary)}
-.ds-effort-toast{position:absolute;top:calc(100% + 6px);right:0;z-index:30;max-width:280px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-state-error-primary);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;font-size:12px;line-height:18px;display:flex;align-items:flex-start;gap:8px;box-shadow:var(--dsw-shadow-lv3,0 12px 28px rgba(0,0,0,.12));overflow:hidden;animation:ds-effort-toast-in 220ms cubic-bezier(.22,.61,.36,1)}
+.ds-effort-toast{position:absolute;top:calc(100% + 6px);right:0;z-index:30;max-width:280px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-state-warn-primary,var(--dsw-alias-label-primary));border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;font-size:12px;line-height:18px;display:flex;align-items:flex-start;gap:8px;box-shadow:var(--dsw-shadow-lv3,0 12px 28px rgba(0,0,0,.12));overflow:hidden;animation:ds-effort-toast-in 220ms cubic-bezier(.22,.61,.36,1)}
 .ds-effort-toast::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:100%;background:currentColor;opacity:.45;animation:ds-effort-toast-countdown 2.6s linear forwards}
 .ds-effort-toastClose{cursor:pointer;background:0 0;border:0;color:inherit;font-size:14px;line-height:18px;padding:0}
 @keyframes ds-effort-toast-in{from{opacity:0;transform:translateX(8px)}}

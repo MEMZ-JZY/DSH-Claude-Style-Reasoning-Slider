@@ -30,6 +30,11 @@ compatible selector whose reasoning pane is a Claude-style animated slider.
   below the slider and submits without `reasoningEffort` (the provider's own
   default applies). Other provider strengths that do not map to a canonical
   slider position are also shown as selectable pills.
+- **Models without reasoning metadata stay manageable** — when DSH does not
+  expose `reasoning`/`efforts` for the selected model (for example some
+  OpenRouter or hand-declared custom entries), the Effort menu still appears:
+  it shows a short “no effort levels” notice plus the safe `Default` pill,
+  instead of hiding every thinking-strength control.
 - **Liang Calibrator (滑动变祖器)** — optional, off by default. Binds the six
   canonical levels to stage names: `Off → 小难梁`, `Low → 牢梁`,
   `Medium → 梁子`, `High → 梁圣`, `Extra → 梁神`, `Max → 梁祖`. When enabled,
@@ -83,6 +88,11 @@ Restart the web profile after installing or removing the bundle.
    - Click **Default** to remove `reasoningEffort` and let the provider decide.
    - Click any extra pill to apply a provider-specific strength that does not
      map to a slider position.
+   - If the model has no declared reasoning levels, the pane shows a notice
+     and only the **Default** pill. For providers that do support effort but
+     are configured without `reasoningEfforts` (common with custom OpenRouter
+     routes), add the levels in DSH's `llm-pi-ai` settings to get the full
+     slider back.
 4. When switching models, the plugin preserves the current effort level where
    supported; otherwise it downgrades to the nearest supported level below or
    falls back to `Default`, always with a toast.

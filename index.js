@@ -53,7 +53,14 @@ export function apply(ctx) {
           res.end();
           return;
         }
-        const rawPath = decodeURIComponent(new URL(rawUrl, "http://x").pathname);
+        let rawPath;
+        try {
+          rawPath = decodeURIComponent(new URL(rawUrl, "http://x").pathname);
+        } catch {
+          res.writeHead(400);
+          res.end();
+          return;
+        }
         const rel = rawPath.slice("/effort-slider-assets".length).replace(/^\/+/, "");
         const target = resolve(normalize(join(assetsRoot, rel)));
         if (target !== assetsRoot && !target.startsWith(assetsRoot + sep)) {

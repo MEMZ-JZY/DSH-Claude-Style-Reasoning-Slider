@@ -80,7 +80,7 @@ class DsEffortSlider extends HTMLElement {
   static get observedAttributes() {
     return [
       "value", "open", "disabled", "supported", "inline",
-      "label", "axis-low", "axis-high", "tooltip",
+      "default-active", "label", "axis-low", "axis-high", "tooltip",
       "input-aria-label", "help-aria-label",
       "liang", "liang-asset-base", "liang-label",
       "chibi", "chibi-sprite",
@@ -107,6 +107,7 @@ class DsEffortSlider extends HTMLElement {
     this._reveal = 0;
     this._isMax = false;
     this._reflectingValue = false;
+    this._defaultActive = false;
     this._reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     // 梁 feature 状态
     this._liangFrame = 0;
@@ -280,7 +281,7 @@ class DsEffortSlider extends HTMLElement {
         }
 
         .level-stage::after {
-          content: "Default";
+          content: attr(data-current);
           visibility: hidden;
           white-space: nowrap;
         }
@@ -1314,6 +1315,7 @@ class DsEffortSlider extends HTMLElement {
     this._thumb = this.shadowRoot.querySelector(".thumb");
     this._currentLabel = this.shadowRoot.querySelector(".level-current");
     this._outgoingLabel = this.shadowRoot.querySelector(".level-outgoing");
+    this._levelStage = this.shadowRoot.querySelector(".level-stage");
     this._titlePrefix = this.shadowRoot.querySelector(".title > span:first-child");
     this._axisLow = this.shadowRoot.querySelector(".axis span:first-child");
     this._axisHigh = this.shadowRoot.querySelector(".axis span:last-child");
@@ -1337,6 +1339,7 @@ class DsEffortSlider extends HTMLElement {
     this._events?.abort();
     this._events = new AbortController();
     const { signal } = this._events;
+    this._defaultActive = this.hasAttribute("default-active");
     this._syncLevels();
     const initialValue = Number.parseFloat(this.getAttribute("value") ?? "0");
     this._setValue(Number.isFinite(initialValue) ? initialValue : 0, {
@@ -1446,6 +1449,14 @@ class DsEffortSlider extends HTMLElement {
       this._syncTexts();
     }
     if (name === "supported") this._parseSupported();
+    if (name === "default-active") {
+      this._defaultActive = this.hasAttribute("default-active");
+      this._parseSupported();
+      this._applyLevelLabel();
+      if (this._input) {
+        this._input.setAttribute("aria-valuetext", this._labelTextForIndex(this._levelIndex));
+      }
+    }
     if (name === "liang" || name === "liang-asset-base" || name === "liang-label") this._syncLiang();
     if (name === "chibi" || name === "chibi-sprite") this._syncChibi();
   }
@@ -1510,6 +1521,15 @@ class DsEffortSlider extends HTMLElement {
     this._syncLevels();
   }
 
+  /** Default 状态：无属性表示当前不是默认档。 */
+  get defaultActive() {
+    return this.hasAttribute("default-active");
+  }
+
+  set defaultActive(next) {
+    this.toggleAttribute("default-active", Boolean(next));
+  }
+
   /** 滑动变祖器开关：无属性即关闭。 */
   get liang() {
     return this.hasAttribute("liang");
@@ -1550,10 +1570,8 @@ class DsEffortSlider extends HTMLElement {
   }
 
   _syncTickStates() {
-    this.toggleAttribute(
-      "data-max-supported",
-      this._levels.some((level) => level.canonical === "max"),
-    );
+    const maxIndex = this._levels.findIndex((level) => level.canonical === "max");
+    this.toggleAttribute("data-max-supported", maxIndex >= 0 && this._isSupported(maxIndex));
     for (let i = 0; i < this._ticks.length; i += 1) {
       const tick = this._ticks[i];
       tick.style.setProperty("--tick-frac", String(this._valueToDisplay(i)));
@@ -1592,49 +1610,27 @@ class DsEffortSlider extends HTMLElement {
             candidate.add(entry);
           }
         });
-        if (candidate.size) set = candidate;
+        // 全 false 是合法状态：表示没有任何标准档位可用，不能回退成全支持。
+        if (booleanList) set = candidate;
+        else if (candidate.size) set = candidate;
       }
     }
-    // index 0 (Default) is ALWAYS treated as supported.
-    set.add(0);
+    // 只有当 Default 状态激活时，index 0 才作为“Default/Off 中性位”保留。
+    // 否则 index 0 就是普通 Off 档位，应该由 supported 数据决定是否可用。
+    if (this._defaultActive) set.add(0);
     for (const index of Array.from(set)) {
       if (index < 0 || index >= this._levels.length || !Number.isInteger(index)) set.delete(index);
     }
     this._supportedSet = new Set([...set].sort((a, b) => a - b));
-    if (this._ticks.length) this._syncTickStates();
+    if (this._ticks.length) {
+      this._syncTickStates();
+      // 同步 .on 状态，避免旧的点亮状态残留到新禁用档位上。
+      this._updateTicks(Math.round(this._value));
+    }
   }
 
   _isSupported(index) {
     return this._supportedSet ? this._supportedSet.has(index) : true;
-  }
-
-  _nearestSupported(target) {
-    const set = this._supportedSet;
-    if (!set || !set.size) return target;
-    let nearest = Infinity;
-    let best = target;
-    for (const index of set) {
-      const distance = Math.abs(index - target);
-      if (distance < nearest) {
-        nearest = distance;
-        best = index;
-      }
-    }
-    return best;
-  }
-
-  // Nearest supported index in a given direction from current.
-  _stepSupported(from, delta) {
-    const set = this._supportedSet;
-    if (!set || !set.size) return clamp(from + delta, 0, this._levels.length - 1);
-    const source = Math.round(from);
-    if (delta === 0) return source;
-    let index = source + (delta > 0 ? 1 : -1);
-    while (index >= 0 && index < this._levels.length) {
-      if (set.has(index)) return index;
-      index += delta > 0 ? 1 : -1;
-    }
-    return source;
   }
 
   _cancelTimer(key) {
@@ -1712,6 +1708,7 @@ class DsEffortSlider extends HTMLElement {
     this._input.disabled = isDisabled;
     this._trigger.disabled = isDisabled;
     this._helpButton.disabled = isDisabled;
+    this._liangToggle.disabled = isDisabled;
   }
 
   _syncTexts() {
@@ -1723,12 +1720,14 @@ class DsEffortSlider extends HTMLElement {
       "Higher effort spends more time reasoning. Max adds the deepest analysis and code pass.";
     this._input.setAttribute("aria-label", this.getAttribute("input-aria-label") || "Effort level");
     this._helpButton.setAttribute("aria-label", this.getAttribute("help-aria-label") || "About effort levels");
+    this._panel.setAttribute("aria-label", this.getAttribute("label") || "Effort settings");
   }
 
   // ---------- 滑动变祖器（梁）feature ----------
 
-  // 档位标签：梁开启时显示「Max 梁祖」形式的后缀
+  // 档位标签：Default 激活时 index 0 显示为 Default；梁开启时其他档位加段名后缀。
   _labelTextForIndex(index) {
+    if (this._defaultActive && index === 0) return "Default";
     const level = this._levels[index];
     const base = level ? level.label : "";
     if (this.liang && index >= 0 && index < LIANG_STAGES.length) {
@@ -1739,6 +1738,7 @@ class DsEffortSlider extends HTMLElement {
 
   _applyLevelLabel() {
     const text = this._labelTextForIndex(this._levelIndex);
+    if (this._levelStage) this._levelStage.dataset.current = text;
     if (this._currentLabel && this._currentLabel.textContent !== text) {
       this._currentLabel.textContent = text;
     }
@@ -1756,6 +1756,7 @@ class DsEffortSlider extends HTMLElement {
     this._liangAssetBase = this.getAttribute("liang-asset-base") || "/effort-slider-assets/liang-frames/";
     this._liangLabel = this.getAttribute("liang-label") || "滑动变祖器";
     this._liangToggleLabel.textContent = this._liangLabel;
+    this._liangToggle.setAttribute("aria-label", this._liangLabel);
     this._liangPortrait.hidden = !enabled;
     // 梁开启时标签加段名后缀；关闭时回纯档位名
     this._applyLevelLabel();
@@ -1763,6 +1764,7 @@ class DsEffortSlider extends HTMLElement {
     this._liangToggle.setAttribute("aria-checked", String(enabled));
     if (enabled) {
       this._resizeLiangCanvas();
+      this._preloadLiangRange();
       this._preloadLiangFrame(this._liangFrame);
       this._updateLiangAria(this._liangFrame);
     }
@@ -1794,31 +1796,44 @@ class DsEffortSlider extends HTMLElement {
     return `${this._liangAssetBase}frame-${String(frame).padStart(2, "0")}.webp`;
   }
 
+  _liangCacheKey(frame) {
+    return `${this._liangAssetBase}|${frame}`;
+  }
+
   _drawLiangFrame(frame) {
     const context = this._liangCanvas.getContext("2d");
     if (!context || !this._liangCanvas.width) return;
-    const image = this._liangImages.get(frame);
+    const image = this._liangImages.get(this._liangCacheKey(frame));
     if (!image) return;
     context.clearRect(0, 0, this._liangCanvas.width, this._liangCanvas.height);
     context.drawImage(image, 0, 0, this._liangCanvas.width, this._liangCanvas.height);
   }
 
   _updateLiangAria(frame) {
-    // 与原版一致：每 5 帧一段；30 帧单独归入最后一段
-    const stageIndex = clamp(Math.floor(frame / 5), 0, LIANG_STAGES.length - 1);
+    // 与 _liangFrameForValue 的 6 帧一段保持一致：0-5 第一段，6-11 第二段……
+    const stageIndex = clamp(Math.floor(frame / 6), 0, LIANG_STAGES.length - 1);
     this._liangCanvas.setAttribute("aria-label", `梁系强度：${LIANG_STAGES[stageIndex]}`);
   }
 
   _preloadLiangFrame(frame) {
-    if (this._liangImages.has(frame)) {
-      const cached = this._liangImages.get(frame);
-      if (cached.complete) this._drawLiangFrame(frame);
+    const key = this._liangCacheKey(frame);
+    if (this._liangImages.has(key)) {
+      const cached = this._liangImages.get(key);
+      if (cached.complete && frame === this._liangFrame) this._drawLiangFrame(frame);
       return;
     }
     const image = new Image();
-    image.onload = () => this._drawLiangFrame(frame);
+    image.onload = () => {
+      if (frame === this._liangFrame) this._drawLiangFrame(frame);
+    };
     image.src = this._liangFrameUrl(frame);
-    this._liangImages.set(frame, image);
+    this._liangImages.set(key, image);
+  }
+
+  _preloadLiangRange() {
+    for (let frame = 0; frame <= LIANG_MAX_FRAME; frame += 1) {
+      this._preloadLiangFrame(frame);
+    }
   }
 
   // ---------- 大肥鱼 thumb feature ----------
@@ -1838,10 +1853,17 @@ class DsEffortSlider extends HTMLElement {
     if (this.open && !this.hasAttribute("inline") && !event.composedPath().includes(this)) this.close();
   }
 
-  _onPointerDown() {
+  _onPointerDown(event) {
     if (this.disabled) return;
     this._dragging = true;
     this.setAttribute("data-dragging", "");
+    if (event && typeof event.currentTarget.setPointerCapture === "function") {
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch (err) {
+        // 某些浏览器/环境下可能已经释放，忽略即可
+      }
+    }
   }
 
   _onPointerUp() {
@@ -1911,21 +1933,6 @@ class DsEffortSlider extends HTMLElement {
     this._setValue(target, { animateLabel: false, reflect: true });
     this._emit("input");
     this._emit("change");
-  }
-
-  _nearestSupportedFrom(probe) {
-    const set = this._supportedSet;
-    if (!set || !set.size) return probe;
-    let nearest = Infinity;
-    let best = probe;
-    for (const index of set) {
-      const distance = Math.abs(index - probe);
-      if (distance < nearest) {
-        nearest = distance;
-        best = index;
-      }
-    }
-    return best;
   }
 
   _snapToNearest() {
@@ -1999,8 +2006,10 @@ class DsEffortSlider extends HTMLElement {
     this._updateTicks(nextIndex);
     this._updateTriggerBars(nextIndex);
 
-    this._triggerValue.textContent = this._labelTextForIndex(nextIndex);
-    this._trigger.setAttribute("aria-label", `Effort level: ${this._labelTextForIndex(nextIndex)}`);
+    const labelText = this._labelTextForIndex(nextIndex);
+    if (this._levelStage) this._levelStage.dataset.current = labelText;
+    this._triggerValue.textContent = labelText;
+    this._trigger.setAttribute("aria-label", `Effort level: ${labelText}`);
     const isMax = Boolean(level && level.canonical === "max");
     this._setMax(isMax);
     // High/Extra 时启动"点阵 + 水波纹"场（Max 的弱化前奏）；离开则停止
@@ -2083,6 +2092,13 @@ class DsEffortSlider extends HTMLElement {
       this._reveal = this._reducedMotion.matches ? 1 : 0;
       this._maxStartedAt = Date.now();
       this._ensureCanvasLoop();
+    } else if (this._fieldMode === "3" || this._fieldMode === "4") {
+      if (this._reducedMotion.matches) {
+        this._cancelTimer("_canvasFrame");
+        this._drawPixelField(Date.now());
+      } else {
+        this._ensureCanvasLoop();
+      }
     }
   }
 
@@ -2318,9 +2334,8 @@ class DsEffortSlider extends HTMLElement {
     context.globalAlpha = 1;
   }
 
-  // High(3)/Extra(4) 的弱化粒子场：稀疏点阵 + 随机闪烁 + 展开动画 +
-  // 明暗水波纹。复用 Max 的预计算网格哈希，强度比 Max 弱很多，
-  // 颜色区分（High 蓝 / Extra 紫）。
+  // High(3)/Extra(4) 的粒子场：靠近 thumb 密集明亮，远处渐暗，
+  // 明暗水波纹对比明显。
   _drawRippleField(context, width, height, time, mode) {
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     const canvasWidth = this._canvas.width / ratio;
@@ -2341,9 +2356,9 @@ class DsEffortSlider extends HTMLElement {
     // 展开动画：从 thumb 向两侧扩散（0→1，900ms）
     const reveal = this._reducedMotion.matches ? 1 : smoothstep(0, 1, elapsed / 900);
 
-    // 明暗水波纹：亮带从中心向外传播
-    const WAVE = 2;
-    const ripplePeriod = 1200;
+    // 明暗水波纹：3 条亮带从中心向外传播，对比更强
+    const WAVE = 3;
+    const ripplePeriod = 1400;
     const ripplePhase = (elapsed % ripplePeriod) / ripplePeriod;
 
     context.save();
@@ -2357,19 +2372,21 @@ class DsEffortSlider extends HTMLElement {
       const dx = Math.abs(x - originX) / (canvasWidth * 0.5);
       if (dx > 1) continue;
       const near = clamp(1 - dx * 1.1, 0, 1); // 近 thumb 更密更亮
-      // 密度：近处保留更多粒子（跳过率随 near 降低）
-      if (base > 0.55 - near * 0.3) continue;
+      // 密度：近处几乎全部保留，远处跳过大部分
+      if (base > 0.6 - near * 0.5) continue;
 
       // 随机闪烁：每颗粒子亮度随时间独立起伏
-      const flicker = 0.5 + 0.5 * Math.sin(elapsed * 0.012 + tempo * Math.PI * 2 + phase * 6.28);
+      const flicker = 0.5 + 0.5 * Math.sin(elapsed * 0.015 + tempo * Math.PI * 2 + phase * 6.28);
 
-      // 明暗水波纹：中心扩散的亮带，对比明显
+      // 水波纹：3 条亮带，对比更强烈
       const wave = 0.5 + 0.5 * Math.sin((dx * WAVE - ripplePhase) * Math.PI * 2);
 
       // 展开：越靠近 thumb 越早亮，向外逐渐显现
       const revealAlpha = smoothstep(0, 1, reveal * (1 - dx * 0.85) + dx * 0.15);
 
-      const alpha = clamp((0.26 + 0.44 * flicker + near * 0.28) * (0.28 + 0.72 * wave) * revealAlpha, 0, 1);
+      // 亮度：近处大幅提高，远处压低；水波纹增强对比
+      const brightness = (0.15 + 0.45 * flicker + near * (0.5 + near * 0.3)) * (0.12 + 0.88 * wave) * revealAlpha;
+      const alpha = clamp(brightness, 0, 1);
       context.fillStyle = `rgba(${blue[0]}, ${blue[1]}, ${blue[2]}, ${alpha.toFixed(3)})`;
       context.fillRect(x + gap * 0.5, y + gap * 0.5, cell - gap, cell - gap);
     }
